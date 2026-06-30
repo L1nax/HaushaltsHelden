@@ -424,11 +424,6 @@ function ParentOverview({ data, setData, setView, setSelectedChild }) {
         <StarAdjustModal child={adjustChild} data={data} setData={setData} onClose={() => setAdjustChild(null)} />
       )}
 
-      <div style={{ marginTop: 28, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Btn color={COLORS.mint} onClick={() => setView("tasks")}>📋 Aufgaben verwalten</Btn>
-        <Btn color={COLORS.lavender} onClick={() => setView("rewards")}>🎁 Belohnungen</Btn>
-        <Btn color={COLORS.rose} outline onClick={() => setView("children")}>👤 Kinder verwalten</Btn>
-      </div>
     </div>
   );
 }
