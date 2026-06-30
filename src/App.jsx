@@ -1165,8 +1165,45 @@ export default function App() {
     </div>
   );
 
+  const VIEW_TITLES = {
+    overview: { label: "Elternbereich", icon: "🔑", sub: "Deine Familien-Übersicht" },
+    tasks:    { label: "Aufgaben",       icon: "📋", sub: "Aufgaben verwalten" },
+    rewards:  { label: "Belohnungen",    icon: "🎁", sub: "Shop & Prämien" },
+    children: { label: "Kinder",         icon: "👤", sub: "Profile verwalten" },
+    settings: { label: "Einstellungen",  icon: "⚙️", sub: "App konfigurieren" },
+  };
+
+  const currentTitle = VIEW_TITLES[view];
+
+  const pageHeader = currentTitle && (
+    <div style={{
+      background: `linear-gradient(135deg, ${COLORS.dark} 0%, #2d3a52 100%)`,
+      borderRadius: 16, padding: "20px 24px", marginBottom: 24,
+      display: "flex", alignItems: "center", gap: 16,
+      boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+    }}>
+      <div style={{
+        width: 52, height: 52, borderRadius: 14,
+        background: "rgba(255,255,255,0.1)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 26, flexShrink: 0,
+      }}>{currentTitle.icon}</div>
+      <div>
+        <div style={{ color: "white", fontWeight: 800, fontSize: 20, lineHeight: 1.2 }}>{currentTitle.label}</div>
+        <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, marginTop: 3 }}>{currentTitle.sub}</div>
+      </div>
+      {data.pin && (
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: COLORS.mint + "22", border: `1px solid ${COLORS.mint}44`, borderRadius: 20, padding: "6px 12px" }}>
+          <span style={{ fontSize: 13 }}>🔒</span>
+          <span style={{ color: COLORS.mint, fontSize: 12, fontWeight: 700 }}>Gesichert</span>
+        </div>
+      )}
+    </div>
+  );
+
   const content = (
     <>
+      {pageHeader}
       {view === "overview"    && <ParentOverview data={data} setData={setData} setView={setView} setSelectedChild={setSelectedChild} />}
       {view === "tasks"       && <TasksView data={data} setData={setData} />}
       {view === "rewards"     && <RewardsView data={data} setData={setData} />}
