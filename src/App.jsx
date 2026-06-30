@@ -1,4 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+
+function useIsTablet() {
+  const [isTablet, setIsTablet] = useState(() => window.innerWidth >= 768);
+  useEffect(() => {
+    const handler = () => setIsTablet(window.innerWidth >= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isTablet;
+}
 
 const COLORS = {
   sun: "#FFD93D", mint: "#6BCB77", sky: "#4D96FF",
@@ -778,6 +788,7 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
     .map(c => c.taskId);
   const [celebrating, setCelebrating] = useState(null);
   const [showPinDialog, setShowPinDialog] = useState(false);
+  const isTablet = useIsTablet();
 
   const dueTasks = data.tasks.filter(task => {
     if (!isTaskDueToday(task)) return false;
@@ -814,13 +825,90 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   const totalTasks = allDueToday.length;
   const progress = totalTasks > 0 ? (doneTasks / totalTasks) * 100 : 0;
 
-  return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${COLORS.sky}22, ${COLORS.mint}22)` }}>
-      <div style={{ background: `linear-gradient(135deg, ${COLORS.sky}, ${COLORS.mint})`, padding: "24px 20px 30px", borderRadius: "0 0 30px 30px" }}>
+  // ── shared sub-sections ──────────────────────────────────────────────────
+  const taskList = (
+    <>
+      <h3 style={{ margin: "0 0 12px", fontSize: 17 }}>📋 Meine Aufgaben heute</h3>
+      <div style={{ display: "grid", gap: 12, marginBottom: isTablet ? 0 : 24 }}>
+        {allDueToday.map(task => {
+          const done = isDone(task);
+          const isCelebrating = celebrating === task.id;
+          const rec = recurringLabel(task.recurring);
+          return (
+            <div key={task.id} onClick={() => !done && completeTask(task)}
+              style={{
+                background: done ? COLORS.mint + "22" : "white",
+                borderRadius: 18, padding: "16px 20px",
+                display: "flex", alignItems: "center", gap: 14,
+                cursor: done ? "default" : "pointer",
+                border: `2px solid ${done ? COLORS.mint : "#eee"}`,
+                boxShadow: done ? "none" : "0 4px 16px #0001",
+                transform: isCelebrating ? "scale(1.04)" : "scale(1)",
+                transition: "all .3s",
+              }}>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: done ? COLORS.mint : COLORS.sky + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>
+                {done ? "✅" : task.emoji}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, textDecoration: done ? "line-through" : "none", color: done ? "#888" : COLORS.dark }}>
+                  {task.title}
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center" }}>
+                  <span style={{ fontSize: 13, color: "#666" }}>+{task.stars}⭐</span>
+                  <Badge color={rec.color}>{rec.badge}</Badge>
+                </div>
+              </div>
+              {!done && <span style={{ fontSize: 22, color: "#ddd" }}>→</span>}
+              {isCelebrating && <span style={{ fontSize: 28 }}>🎊</span>}
+            </div>
+          );
+        })}
+        {allDueToday.length === 0 && (
+          <div style={{ textAlign: "center", padding: 32, color: "#aaa" }}>Heute keine Aufgaben 🎉</div>
+        )}
+      </div>
+    </>
+  );
+
+  const shopList = (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 17 }}>🛒 Belohnungs-Shop</h3>
+        <span style={{ fontSize: 13, color: "#888" }}>⭐ {child.stars} verfügbar</span>
+      </div>
+      <div style={{ display: "grid", gap: 10 }}>
+        {data.rewards.map(reward => {
+          const canAfford = child.stars >= reward.cost;
+          return (
+            <div key={reward.id}
+              style={{
+                background: "white", borderRadius: 16, padding: "14px 18px",
+                display: "flex", alignItems: "center", gap: 14,
+                border: `2px solid ${canAfford ? COLORS.lavender + "55" : "#eee"}`,
+                opacity: canAfford ? 1 : 0.6,
+              }}>
+              <span style={{ fontSize: 28 }}>{reward.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700 }}>{reward.title}</div>
+                <span style={{ fontSize: 13, color: COLORS.sun, fontWeight: 700 }}>⭐ {reward.cost}</span>
+              </div>
+              <Btn small color={COLORS.lavender} disabled={!canAfford} onClick={() => redeemReward(reward)}>
+                {canAfford ? "Holen!" : "Noch nicht"}
+              </Btn>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  const header = (
+    <div style={{ background: `linear-gradient(135deg, ${COLORS.sky}, ${COLORS.mint})`, padding: "24px 20px 30px", borderRadius: isTablet ? "0 0 30px 30px" : "0 0 30px 30px" }}>
+      <div style={{ maxWidth: isTablet ? 1100 : undefined, margin: isTablet ? "0 auto" : undefined }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ color: "white", opacity: 0.85, fontSize: 14, marginBottom: 4 }}>Hallo!</div>
-            <div style={{ color: "white", fontSize: 28, fontWeight: 900 }}>{child.avatar} {child.name}</div>
+            <div style={{ color: "white", fontSize: isTablet ? 32 : 28, fontWeight: 900 }}>{child.avatar} {child.name}</div>
           </div>
           <button onClick={() => setShowPinDialog(true)}
             style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 12, padding: "8px 14px", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -828,30 +916,28 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
           </button>
         </div>
 
-        {data.children.length > 1 && (
-          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            {data.children.map(c => {
-              const isActive = c.id === childId;
-              return (
-                <button key={c.id} onClick={() => !isActive && setSelectedChild(c.id)}
-                  style={{
-                    background: isActive ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.15)",
-                    border: `2px solid ${isActive ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)"}`,
-                    borderRadius: 14, padding: "6px 14px",
-                    display: "flex", alignItems: "center", gap: 7,
-                    cursor: isActive ? "default" : "pointer",
-                    transition: "all .2s",
-                  }}>
-                  <span style={{ fontSize: 20 }}>{c.avatar}</span>
-                  <span style={{ color: "white", fontWeight: isActive ? 800 : 600, fontSize: 14 }}>{c.name}</span>
-                  {isActive && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.8)" }}>✓</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginTop: 16 }}>
+          {data.children.length > 1 && (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {data.children.map(c => {
+                const isActive = c.id === childId;
+                return (
+                  <button key={c.id} onClick={() => !isActive && setSelectedChild(c.id)}
+                    style={{
+                      background: isActive ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.15)",
+                      border: `2px solid ${isActive ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)"}`,
+                      borderRadius: 14, padding: "6px 14px",
+                      display: "flex", alignItems: "center", gap: 7,
+                      cursor: isActive ? "default" : "pointer", transition: "all .2s",
+                    }}>
+                    <span style={{ fontSize: 20 }}>{c.avatar}</span>
+                    <span style={{ color: "white", fontWeight: isActive ? 800 : 600, fontSize: 14 }}>{c.name}</span>
+                    {isActive && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.8)" }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 16, padding: "12px 20px", display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 28 }}>⭐</span>
             <div>
@@ -861,6 +947,27 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+
+  const progressCard = (
+    <Card style={{ marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ fontWeight: 700 }}>Heute geschafft</span>
+        <span style={{ fontWeight: 700, color: COLORS.mint }}>{doneTasks}/{totalTasks}</span>
+      </div>
+      <div style={{ background: "#f0f0f0", borderRadius: 10, height: 14, overflow: "hidden" }}>
+        <div style={{ background: `linear-gradient(90deg, ${COLORS.mint}, ${COLORS.sky})`, height: "100%", width: `${progress}%`, borderRadius: 10, transition: "width .5s" }} />
+      </div>
+      {progress === 100 && totalTasks > 0 && (
+        <div style={{ textAlign: "center", marginTop: 12, fontSize: 22 }}>🎉 Alle Aufgaben erledigt! Super gemacht!</div>
+      )}
+    </Card>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${COLORS.sky}22, ${COLORS.mint}22)` }}>
+      {header}
 
       {showPinDialog && (
         data.pin
@@ -868,88 +975,25 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
           : <AutoRedirect onRedirect={() => { setShowPinDialog(false); setView("overview"); }} />
       )}
 
-      <div style={{ padding: "20px 16px" }}>
-        <Card style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-            <span style={{ fontWeight: 700 }}>Heute geschafft</span>
-            <span style={{ fontWeight: 700, color: COLORS.mint }}>{doneTasks}/{totalTasks}</span>
+      {isTablet ? (
+        // ── Tablet: 2-column layout ──────────────────────────────────────────
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 32px", display: "grid", gridTemplateColumns: "1fr 380px", gap: 28, alignItems: "start" }}>
+          <div>
+            {progressCard}
+            {taskList}
           </div>
-          <div style={{ background: "#f0f0f0", borderRadius: 10, height: 14, overflow: "hidden" }}>
-            <div style={{ background: `linear-gradient(90deg, ${COLORS.mint}, ${COLORS.sky})`, height: "100%", width: `${progress}%`, borderRadius: 10, transition: "width .5s" }} />
+          <div style={{ position: "sticky", top: 24 }}>
+            {shopList}
           </div>
-          {progress === 100 && totalTasks > 0 && (
-            <div style={{ textAlign: "center", marginTop: 12, fontSize: 22 }}>🎉 Alle Aufgaben erledigt! Super gemacht!</div>
-          )}
-        </Card>
-
-        <h3 style={{ margin: "0 0 12px", fontSize: 17 }}>📋 Meine Aufgaben heute</h3>
-        <div style={{ display: "grid", gap: 12, marginBottom: 24 }}>
-          {allDueToday.map(task => {
-            const done = isDone(task);
-            const isCelebrating = celebrating === task.id;
-            const rec = recurringLabel(task.recurring);
-            return (
-              <div key={task.id} onClick={() => !done && completeTask(task)}
-                style={{
-                  background: done ? COLORS.mint + "22" : "white",
-                  borderRadius: 18, padding: "16px 20px",
-                  display: "flex", alignItems: "center", gap: 14,
-                  cursor: done ? "default" : "pointer",
-                  border: `2px solid ${done ? COLORS.mint : "#eee"}`,
-                  boxShadow: done ? "none" : "0 4px 16px #0001",
-                  transform: isCelebrating ? "scale(1.04)" : "scale(1)",
-                  transition: "all .3s",
-                }}>
-                <div style={{ width: 48, height: 48, borderRadius: 14, background: done ? COLORS.mint : COLORS.sky + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>
-                  {done ? "✅" : task.emoji}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16, textDecoration: done ? "line-through" : "none", color: done ? "#888" : COLORS.dark }}>
-                    {task.title}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center" }}>
-                    <span style={{ fontSize: 13, color: "#666" }}>+{task.stars}⭐</span>
-                    <Badge color={rec.color}>{rec.badge}</Badge>
-                  </div>
-                </div>
-                {!done && <span style={{ fontSize: 22, color: "#ddd" }}>→</span>}
-                {isCelebrating && <span style={{ fontSize: 28 }}>🎊</span>}
-              </div>
-            );
-          })}
-          {allDueToday.length === 0 && (
-            <div style={{ textAlign: "center", padding: 32, color: "#aaa" }}>Heute keine Aufgaben 🎉</div>
-          )}
         </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 17 }}>🛒 Belohnungs-Shop</h3>
-          <span style={{ fontSize: 13, color: "#888" }}>⭐ {child.stars} verfügbar</span>
+      ) : (
+        // ── Mobile: single column ─────────────────────────────────────────────
+        <div style={{ padding: "20px 16px" }}>
+          {progressCard}
+          {taskList}
+          {shopList}
         </div>
-        <div style={{ display: "grid", gap: 10 }}>
-          {data.rewards.map(reward => {
-            const canAfford = child.stars >= reward.cost;
-            return (
-              <div key={reward.id}
-                style={{
-                  background: "white", borderRadius: 16, padding: "14px 18px",
-                  display: "flex", alignItems: "center", gap: 14,
-                  border: `2px solid ${canAfford ? COLORS.lavender + "55" : "#eee"}`,
-                  opacity: canAfford ? 1 : 0.6,
-                }}>
-                <span style={{ fontSize: 28 }}>{reward.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700 }}>{reward.title}</div>
-                  <span style={{ fontSize: 13, color: COLORS.sun, fontWeight: 700 }}>⭐ {reward.cost}</span>
-                </div>
-                <Btn small color={COLORS.lavender} disabled={!canAfford} onClick={() => redeemReward(reward)}>
-                  {canAfford ? "Holen!" : "Noch nicht"}
-                </Btn>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1102,10 +1146,9 @@ export default function App() {
   const [view, setView] = useState("overview");
   const [selectedChild, setSelectedChild] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const isTablet = useIsTablet();
 
-  useEffect(() => {
-    requestPushPermission();
-  }, []);
+  useEffect(() => { requestPushPermission(); }, []);
 
   const openNotifications = () => {
     setShowNotifications(true);
@@ -1114,19 +1157,104 @@ export default function App() {
   };
 
   const NAV = [
-    { id: "overview", label: "🏠 Start" },
-    { id: "tasks",    label: "📋 Aufgaben" },
-    { id: "rewards",  label: "🎁 Shop" },
-    { id: "children", label: "👤 Kinder" },
-    { id: "settings", label: "⚙️" },
+    { id: "overview", label: "🏠 Start",     icon: "🏠" },
+    { id: "tasks",    label: "📋 Aufgaben",  icon: "📋" },
+    { id: "rewards",  label: "🎁 Shop",      icon: "🎁" },
+    { id: "children", label: "👤 Kinder",    icon: "👤" },
+    { id: "settings", label: "⚙️ Einst.",    icon: "⚙️" },
   ];
 
   if (view === "childMode" && selectedChild) return (
-    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", maxWidth: 520, margin: "0 auto" }}>
+    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
       <ChildMode data={data} setData={setData} childId={selectedChild} setSelectedChild={setSelectedChild} setView={setView} />
     </div>
   );
 
+  const content = (
+    <>
+      {view === "overview"    && <ParentOverview data={data} setData={setData} setView={setView} setSelectedChild={setSelectedChild} />}
+      {view === "tasks"       && <TasksView data={data} setData={setData} />}
+      {view === "rewards"     && <RewardsView data={data} setData={setData} />}
+      {view === "children"    && <ChildrenView data={data} setData={setData} />}
+      {view === "settings"    && <SettingsView data={data} setData={setData} />}
+      {view === "childDetail" && selectedChild && <ChildDetail data={data} setData={setData} childId={selectedChild} setView={setView} />}
+    </>
+  );
+
+  const notifPanel = showNotifications && (
+    <div style={{ position: "fixed", inset: 0, zIndex: 150, display: "flex", justifyContent: "flex-end" }}>
+      <div onClick={() => setShowNotifications(false)} style={{ flex: 1, background: "#0004" }} />
+      <div style={{ width: "min(420px, 100vw)", background: COLORS.cream, height: "100vh", overflowY: "auto", padding: 20, boxShadow: "-4px 0 30px #0003", animation: "slideIn .25s ease" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+          <button onClick={() => setShowNotifications(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#888" }}>✕</button>
+        </div>
+        <NotificationsView data={data} setData={setData} />
+      </div>
+    </div>
+  );
+
+  if (isTablet) {
+    // ── Tablet layout: fixed sidebar + main ────────────────────────────────
+    return (
+      <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", minHeight: "100vh", background: COLORS.cream }}>
+        {/* Sidebar */}
+        <div style={{ width: 220, background: COLORS.dark, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
+          <div style={{ padding: "22px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 24 }}>🏡</span>
+              <span style={{ color: "white", fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>Haushalts-<br />Helden</span>
+            </div>
+          </div>
+
+          <nav style={{ padding: "12px 10px", flex: 1 }}>
+            {NAV.map(n => (
+              <button key={n.id} onClick={() => setView(n.id)}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 12,
+                  background: view === n.id ? "rgba(255,255,255,0.12)" : "transparent",
+                  border: "none",
+                  borderLeft: view === n.id ? `3px solid ${COLORS.sky}` : "3px solid transparent",
+                  borderRadius: view === n.id ? "0 10px 10px 0" : "0 10px 10px 0",
+                  padding: "12px 14px", marginBottom: 4,
+                  color: view === n.id ? "white" : "rgba(255,255,255,0.55)",
+                  fontWeight: view === n.id ? 700 : 400, fontSize: 14,
+                  cursor: "pointer", textAlign: "left", transition: "all .15s",
+                }}>
+                <span style={{ fontSize: 18 }}>{n.icon}</span>
+                {n.label.replace(/^.\s/, "")}
+              </button>
+            ))}
+          </nav>
+
+          <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            {data.pin && <div style={{ color: COLORS.mint, fontSize: 12, marginBottom: 8, paddingLeft: 14 }}>🔒 PIN aktiv</div>}
+            <button onClick={openNotifications}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, background: "transparent", border: "none", borderRadius: 10, padding: "10px 14px", color: "rgba(255,255,255,0.55)", fontSize: 14, cursor: "pointer", textAlign: "left", position: "relative" }}>
+              <span style={{ fontSize: 18 }}>🔔</span>
+              Benachrichtigungen
+              {(data.notifications || []).filter(n => !n.read).length > 0 && (
+                <span style={{ background: COLORS.rose, color: "white", borderRadius: "50%", width: 18, height: 18, fontSize: 11, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: "auto" }}>
+                  {(data.notifications || []).filter(n => !n.read).length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Main */}
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 36px" }}>
+            {content}
+          </div>
+        </div>
+
+        {notifPanel}
+        <style>{`@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
+      </div>
+    );
+  }
+
+  // ── Mobile layout: top header + bottom tabs ────────────────────────────────
   return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", maxWidth: 720, margin: "0 auto", minHeight: "100vh", background: COLORS.cream }}>
       <div style={{ background: COLORS.dark, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -1138,24 +1266,7 @@ export default function App() {
         </div>
       </div>
 
-      {showNotifications && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 150, display: "flex", justifyContent: "flex-end" }}>
-          <div onClick={() => setShowNotifications(false)} style={{ flex: 1, background: "#0004" }} />
-          <div style={{
-            width: "min(420px, 100vw)", background: COLORS.cream,
-            height: "100vh", overflowY: "auto", padding: 20,
-            boxShadow: "-4px 0 30px #0003",
-            animation: "slideIn .25s ease",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <span />
-              <button onClick={() => setShowNotifications(false)}
-                style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#888" }}>✕</button>
-            </div>
-            <NotificationsView data={data} setData={setData} />
-          </div>
-        </div>
-      )}
+      {notifPanel}
 
       <div style={{ background: "white", display: "flex", borderBottom: "2px solid #f0f0f0" }}>
         {NAV.map(n => (
@@ -1171,14 +1282,7 @@ export default function App() {
         ))}
       </div>
 
-      <div style={{ padding: 24 }}>
-        {view === "overview"    && <ParentOverview data={data} setData={setData} setView={setView} setSelectedChild={setSelectedChild} />}
-        {view === "tasks"       && <TasksView data={data} setData={setData} />}
-        {view === "rewards"     && <RewardsView data={data} setData={setData} />}
-        {view === "children"    && <ChildrenView data={data} setData={setData} />}
-        {view === "settings"    && <SettingsView data={data} setData={setData} />}
-        {view === "childDetail" && selectedChild && <ChildDetail data={data} setData={setData} childId={selectedChild} setView={setView} />}
-      </div>
+      <div style={{ padding: 24 }}>{content}</div>
       <style>{`@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
     </div>
   );
