@@ -547,6 +547,7 @@ function ChildrenView({ data, setData }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", avatar: "🦊" });
   const [adjustChild, setAdjustChild] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // child object to delete
 
   const addChild = () => {
     if (!form.name.trim()) return;
@@ -557,6 +558,7 @@ function ChildrenView({ data, setData }) {
   const removeChild = (id) => {
     const updated = { ...data, children: data.children.filter(c => c.id !== id) };
     setData(updated); saveData(updated);
+    setDeleteConfirm(null);
   };
 
   return (
@@ -578,7 +580,7 @@ function ChildrenView({ data, setData }) {
                 style={{ background: COLORS.sun + "33", border: `1.5px solid ${COLORS.sun}88`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 15, fontWeight: 700, color: "#b8860b" }}>
                 ⭐±
               </button>
-              <button onClick={() => removeChild(child.id)}
+              <button onClick={() => setDeleteConfirm(child)}
                 style={{ background: "#0001", border: "1.5px solid #ddd", borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 15 }}>🗑️</button>
             </div>
           </Card>
@@ -587,6 +589,26 @@ function ChildrenView({ data, setData }) {
 
       {adjustChild && (
         <StarAdjustModal child={adjustChild} data={data} setData={setData} onClose={() => setAdjustChild(null)} />
+      )}
+
+      {deleteConfirm && (
+        <Modal title="Kind wirklich löschen?" onClose={() => setDeleteConfirm(null)}>
+          <div style={{ display: "grid", gap: 20 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 56, marginBottom: 12 }}>{deleteConfirm.avatar}</div>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{deleteConfirm.name}</div>
+              <div style={{ background: COLORS.rose + "18", border: `1.5px solid ${COLORS.rose}55`, borderRadius: 12, padding: "12px 16px", color: COLORS.rose, fontWeight: 600, fontSize: 14, lineHeight: 1.5 }}>
+                ⚠️ Achtung: Alle Sterne, erledigten Aufgaben und der Verlauf von <strong>{deleteConfirm.name}</strong> werden unwiderruflich gelöscht.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn onClick={() => setDeleteConfirm(null)} style={{ flex: 1 }}>Abbrechen</Btn>
+              <Btn color={COLORS.rose} onClick={() => removeChild(deleteConfirm.id)} style={{ flex: 1 }}>
+                Ja, endgültig löschen
+              </Btn>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {showForm && (
