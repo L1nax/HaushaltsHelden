@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { loadFromFirestore, saveToFirestore, getFamilyId } from "./firebase.js";
 
 function useIsTablet() {
   const [isTablet, setIsTablet] = useState(() => window.innerWidth >= 768);
@@ -76,15 +77,21 @@ const DEFAULT_DATA = {
   ],
 };
 
-function loadData() {
+function loadDataLocal() {
   try {
     const r = localStorage.getItem("haushalts-app-data");
-    return r ? JSON.parse(r) : DEFAULT_DATA;
-  } catch { return DEFAULT_DATA; }
+    return r ? JSON.parse(r) : null;
+  } catch { return null; }
 }
 
-function saveData(data) {
+function saveDataLocal(data) {
   try { localStorage.setItem("haushalts-app-data", JSON.stringify(data)); } catch {}
+}
+
+// saveData writes locally immediately and syncs to Firestore in the background
+function saveData(data) {
+  saveDataLocal(data);
+  saveToFirestore(data).catch(() => {});
 }
 
 function addNotification(data, type, child, text) {
@@ -1015,10 +1022,18 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   );
 }
 
-function SettingsView({ data, setData }) {
+function SettingsView({ data, setData, familyId }) {
   const [showSetPin, setShowSetPin] = useState(false);
   const [showRemovePin, setShowRemovePin] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyId = () => {
+    navigator.clipboard.writeText(familyId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const savePin = (newPin) => {
     const updated = { ...data, pin: newPin };
@@ -1061,6 +1076,37 @@ function SettingsView({ data, setData }) {
           {data.pin && (
             <Btn outline color={COLORS.rose} onClick={() => setShowRemovePin(true)}>PIN entfernen</Btn>
           )}
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 36 }}>☁️</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Familien-ID</div>
+            <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
+              Mit dieser ID kannst du die App auf einem weiteren Gerät öffnen und dieselben Daten nutzen.
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, background: "#f5f5f5", borderRadius: 10, padding: "10px 16px", fontFamily: "monospace", fontSize: 18, fontWeight: 700, letterSpacing: 3, color: COLORS.dark }}>
+            {familyId}
+          </div>
+          <Btn color={COLORS.sky} onClick={copyId}>{copied ? "✅ Kopiert!" : "Kopieren"}</Btn>
+        </div>
+        <div style={{ marginTop: 16, borderTop: "1px solid #eee", paddingTop: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#666" }}>Anderes Gerät verbinden</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input id="fam-id-input" placeholder="Familien-ID eingeben…"
+              style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 15, fontFamily: "monospace", letterSpacing: 2, textTransform: "uppercase" }} />
+            <Btn color={COLORS.mint} onClick={() => {
+              const val = document.getElementById("fam-id-input").value.trim().toUpperCase();
+              if (val.length < 4) return;
+              localStorage.setItem("familyId", val);
+              window.location.reload();
+            }}>Verbinden</Btn>
+          </div>
         </div>
       </Card>
 
@@ -1159,10 +1205,22 @@ function NotificationsView({ data, setData }) {
 }
 
 export default function App() {
-  const [data, setData] = useState(() => loadData());
+  const [data, setData] = useState(() => loadDataLocal() ?? DEFAULT_DATA);
+  const [loading, setLoading] = useState(true);
+  const [familyId] = useState(() => getFamilyId());
   const [view, setView] = useState("overview");
   const [selectedChild, setSelectedChild] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // On mount: load from Firestore and override local data if found
+  useEffect(() => {
+    loadFromFirestore().then(remote => {
+      if (remote) {
+        setData(remote);
+        saveDataLocal(remote);
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
   const isTablet = useIsTablet();
 
   useEffect(() => { requestPushPermission(); }, []);
@@ -1180,6 +1238,14 @@ export default function App() {
     { id: "children", label: "👤 Kinder",    icon: "👤" },
     { id: "settings", label: "⚙️ Einst.",    icon: "⚙️" },
   ];
+
+  if (loading) return (
+    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", minHeight: "100vh", background: COLORS.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+      <div style={{ fontSize: 52 }}>🏡</div>
+      <div style={{ fontWeight: 800, fontSize: 20, color: COLORS.dark }}>Haushalts-Helden</div>
+      <div style={{ color: "#888", fontSize: 14 }}>Daten werden geladen…</div>
+    </div>
+  );
 
   if (view === "childMode" && selectedChild) return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
@@ -1228,7 +1294,7 @@ export default function App() {
       {view === "tasks"       && <TasksView data={data} setData={setData} />}
       {view === "rewards"     && <RewardsView data={data} setData={setData} />}
       {view === "children"    && <ChildrenView data={data} setData={setData} />}
-      {view === "settings"    && <SettingsView data={data} setData={setData} />}
+      {view === "settings"    && <SettingsView data={data} setData={setData} familyId={familyId} />}
       {view === "childDetail" && selectedChild && <ChildDetail data={data} setData={setData} childId={selectedChild} setView={setView} />}
     </>
   );
