@@ -1178,9 +1178,8 @@ export default function App() {
   const pageHeader = currentTitle && (
     <div style={{
       background: `linear-gradient(135deg, ${COLORS.dark} 0%, #2d3a52 100%)`,
-      borderRadius: 16, padding: "20px 24px", marginBottom: 24,
+      padding: "16px 20px",
       display: "flex", alignItems: "center", gap: 16,
-      boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
     }}>
       <div style={{
         width: 52, height: 52, borderRadius: 14,
@@ -1203,7 +1202,6 @@ export default function App() {
 
   const content = (
     <>
-      {pageHeader}
       {view === "overview"    && <ParentOverview data={data} setData={setData} setView={setView} setSelectedChild={setSelectedChild} />}
       {view === "tasks"       && <TasksView data={data} setData={setData} />}
       {view === "rewards"     && <RewardsView data={data} setData={setData} />}
@@ -1274,8 +1272,9 @@ export default function App() {
         </div>
 
         {/* Main */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 36px" }}>
+        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+          {pageHeader}
+          <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 36px", width: "100%" }}>
             {content}
           </div>
         </div>
@@ -1299,6 +1298,8 @@ export default function App() {
       </div>
 
       {notifPanel}
+
+      {pageHeader}
 
       <div style={{ background: "white", display: "flex", borderBottom: "2px solid #f0f0f0" }}>
         {NAV.map(n => (
