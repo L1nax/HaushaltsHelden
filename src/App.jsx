@@ -930,14 +930,8 @@ function ChildrenView({ data, setData }) {
         <Modal title={`${editChild.avatar} ${editChild.name} bearbeiten`} onClose={() => setEditChild(null)}>
           <div style={{ display: "grid", gap: 16 }}>
             <FormField label="Avatar">
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {AVATARS.map(a => (
-                  <button key={a} onClick={() => setEditForm({ ...editForm, avatar: a })}
-                    style={{ fontSize: 28, background: editForm.avatar === a ? COLORS.sky + "33" : "#f5f5f5", border: `2px solid ${editForm.avatar === a ? COLORS.sky : "transparent"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer" }}>
-                    {a}
-                  </button>
-                ))}
-              </div>
+              <EmojiPicker value={editForm.avatar} onChange={a => setEditForm({ ...editForm, avatar: a })}
+                list={AVATARS} accentColor={COLORS.sky} />
             </FormField>
             <FormField label="Name">
               <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })}
@@ -976,14 +970,8 @@ function ChildrenView({ data, setData }) {
         <Modal title="Kind hinzufügen" onClose={() => setShowForm(false)}>
           <div style={{ display: "grid", gap: 14 }}>
             <FormField label="Avatar">
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {AVATARS.map(a => (
-                  <button key={a} onClick={() => setForm({ ...form, avatar: a })}
-                    style={{ fontSize: 28, background: form.avatar === a ? COLORS.sky + "33" : "#f5f5f5", border: `2px solid ${form.avatar === a ? COLORS.sky : "transparent"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer" }}>
-                    {a}
-                  </button>
-                ))}
-              </div>
+              <EmojiPicker value={form.avatar} onChange={a => setForm({ ...form, avatar: a })}
+                list={AVATARS} accentColor={COLORS.sky} />
             </FormField>
             <FormField label="Name">
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
