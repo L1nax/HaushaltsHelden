@@ -1697,7 +1697,6 @@ function SettingsView({ data, setData, familyId }) {
 
   return (
     <div>
-      <h2 style={{ margin: "0 0 20px" }}>Einstellungen</h2>
       <Card>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 36 }}>🔒</div>
@@ -2085,7 +2084,7 @@ export default function App() {
                   cursor: "pointer", textAlign: "left", transition: "all .15s",
                 }}>
                 <span style={{ fontSize: 18 }}>{n.icon}</span>
-                {n.label.replace(/^.\s/u, "")}
+                {n.label.split(" ").slice(1).join(" ")}
               </button>
             ))}
           </nav>
@@ -2198,7 +2197,7 @@ export default function App() {
             }}>
             <span style={{ fontSize: 18, lineHeight: 1 }}>{n.icon}</span>
             <span style={{ fontSize: 11, fontWeight: view === n.id ? 700 : 500, color: view === n.id ? COLORS.sky : "#999" }}>
-              {n.label.replace(/^.\s/u, "")}
+              {n.label.split(" ").slice(1).join(" ")}
             </span>
           </button>
         ))}
