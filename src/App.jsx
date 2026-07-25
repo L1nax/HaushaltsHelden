@@ -377,16 +377,29 @@ function Modal({ title, onClose, children }) {
   );
 }
 
+// Höchstens 4 Reihen zeigen, der Rest wird scrollbar.
+const EMOJI_CELL = 46;
+const EMOJI_GAP = 8;
+const EMOJI_ROWS = 4;
+
 function EmojiPicker({ value, onChange, list, accentColor }) {
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: `repeat(auto-fill, minmax(${EMOJI_CELL}px, 1fr))`,
+      gridAutoRows: `${EMOJI_CELL}px`,
+      gap: EMOJI_GAP,
+      maxHeight: EMOJI_ROWS * EMOJI_CELL + (EMOJI_ROWS - 1) * EMOJI_GAP,
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
+    }}>
       {list.map(e => (
         <button key={e} onClick={() => onChange(e)}
           style={{
-            fontSize: 24,
+            fontSize: 24, lineHeight: 1, padding: 0,
             background: value === e ? accentColor + "33" : "#f5f5f5",
             border: `2px solid ${value === e ? accentColor : "transparent"}`,
-            borderRadius: 10, padding: "6px 10px", cursor: "pointer",
+            borderRadius: 10, cursor: "pointer",
           }}>
           {e}
         </button>
