@@ -93,14 +93,32 @@ function isTaskDueToday(task) {
   }
 }
 
-function completedThisWeek(completions, taskId, childId) {
+function startOfThisWeek() {
   const now = new Date();
-  const startOfWeek = new Date(now);
+  const start = new Date(now);
   const day = now.getDay() === 0 ? 6 : now.getDay() - 1;
-  startOfWeek.setDate(now.getDate() - day);
-  startOfWeek.setHours(0, 0, 0, 0);
-  return completions.some(c =>
-    c.taskId === taskId && c.childId === childId && new Date(c.date) >= startOfWeek
+  start.setDate(now.getDate() - day);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+// A task without an explicit assignment belongs to every child.
+function taskAppliesTo(task, childId) {
+  return !task.childIds?.length || task.childIds.includes(childId);
+}
+
+function dueTasksFor(data, childId) {
+  return (data.tasks || []).filter(t => isTaskDueToday(t) && taskAppliesTo(t, childId));
+}
+
+// The completion marking a task as done for a child inside its current period.
+// Shared tasks ("einer reicht") count as done as soon as any child completed them.
+function taskCompletion(data, task, childId) {
+  const inPeriod = task.recurring === "weekly"
+    ? (c) => new Date(c.date) >= startOfThisWeek()
+    : (c) => new Date(c.date).toDateString() === new Date().toDateString();
+  return (data.completions || []).find(c =>
+    c.taskId === task.id && (task.shared || c.childId === childId) && inPeriod(c)
   );
 }
 
@@ -263,22 +281,8 @@ function undoTaskCompletion(data, task, childId) {
   const child = (data.children || []).find(c => c.id === childId);
   if (!child) return data;
 
-  let completionToRemove;
-  if (task.recurring === "weekly") {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    const day = now.getDay() === 0 ? 6 : now.getDay() - 1;
-    startOfWeek.setDate(now.getDate() - day);
-    startOfWeek.setHours(0, 0, 0, 0);
-    completionToRemove = (data.completions || []).find(c =>
-      c.taskId === task.id && c.childId === childId && new Date(c.date) >= startOfWeek
-    );
-  } else {
-    const todayStr = new Date().toDateString();
-    completionToRemove = (data.completions || []).find(c =>
-      c.taskId === task.id && c.childId === childId && new Date(c.date).toDateString() === todayStr
-    );
-  }
+  // Never undo another child's completion of a shared task.
+  const completionToRemove = taskCompletion(data, { ...task, shared: false }, childId);
   if (!completionToRemove) return data;
 
   let updated = {
@@ -402,9 +406,30 @@ function FormField({ label, children }) {
 
 const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 10, border: "2px solid #eee", fontSize: 15, boxSizing: "border-box" };
 
-function TaskForm({ initial, onSave, onCancel }) {
+const chipStyle = (active, color) => ({
+  padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontWeight: 700, fontSize: 13,
+  background: active ? color + "22" : "#f5f5f5",
+  border: `2px solid ${active ? color : "transparent"}`,
+  color: active ? color : "#555",
+});
+
+function TaskForm({ initial, childrenList, onSave, onCancel }) {
   const [form, setForm] = useState(initial);
-  const save = () => { if (!form.title.trim()) return; onSave({ ...form, stars: Number(form.stars) }); };
+  const assigned = form.childIds || [];
+  const forEveryone = assigned.length === 0;
+  // A task assigned to a single child can only ever be done by that child.
+  const affected = forEveryone ? childrenList.length : assigned.length;
+
+  const toggleChild = (id) => {
+    const next = assigned.includes(id) ? assigned.filter(x => x !== id) : [...assigned, id];
+    // Picking every child is the same as picking nobody in particular.
+    setForm({ ...form, childIds: next.length === childrenList.length ? [] : next });
+  };
+
+  const save = () => {
+    if (!form.title.trim()) return;
+    onSave({ ...form, stars: Number(form.stars), shared: affected > 1 && !!form.shared });
+  };
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <FormField label="Emoji auswählen">
@@ -434,6 +459,37 @@ function TaskForm({ initial, onSave, onCancel }) {
           ))}
         </div>
       </FormField>
+      {childrenList.length > 0 && (
+        <FormField label="👦 Für wen?">
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => setForm({ ...form, childIds: [] })}
+              style={chipStyle(forEveryone, COLORS.sky)}>
+              👨‍👩‍👧‍👦 Alle
+            </button>
+            {childrenList.map(c => (
+              <button key={c.id} onClick={() => toggleChild(c.id)}
+                style={chipStyle(!forEveryone && assigned.includes(c.id), COLORS.sky)}>
+                {c.avatar} {c.name}
+              </button>
+            ))}
+          </div>
+        </FormField>
+      )}
+      {affected > 1 && (
+        <FormField label="🤝 Wer muss sie erledigen?">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {[
+              { shared: false, label: "Jedes Kind einzeln" },
+              { shared: true,  label: "Einer reicht" },
+            ].map(opt => (
+              <button key={String(opt.shared)} onClick={() => setForm({ ...form, shared: opt.shared })}
+                style={{ ...chipStyle(!!form.shared === opt.shared, COLORS.lavender), borderRadius: 12, textAlign: "center" }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </FormField>
+      )}
       <div style={{ display: "flex", gap: 10 }}>
         <Btn color={COLORS.mint} onClick={save}>Speichern</Btn>
         <Btn outline color={COLORS.rose} onClick={onCancel}>Abbrechen</Btn>
@@ -589,15 +645,12 @@ function StarAdjustModal({ child, data, setData, onClose }) {
 
 function ParentOverview({ data, setData, setView, setSelectedChild, goToChildMode }) {
   const todayStr = new Date().toDateString();
-  const dueTodayTasks = data.tasks.filter(isTaskDueToday);
   const [adjustChild, setAdjustChild] = useState(null);
 
   const tasksDoneToday = (childId) =>
     data.completions.filter(c => c.childId === childId && new Date(c.date).toDateString() === todayStr).length;
-  const tasksPending = (childId) => {
-    const done = data.completions.filter(c => c.childId === childId && new Date(c.date).toDateString() === todayStr).map(c => c.taskId);
-    return dueTodayTasks.filter(t => !done.includes(t.id)).length;
-  };
+  const tasksPending = (childId) =>
+    dueTasksFor(data, childId).filter(t => !taskCompletion(data, t, childId)).length;
 
   return (
     <div>
@@ -658,7 +711,7 @@ function ParentOverview({ data, setData, setView, setSelectedChild, goToChildMod
 }
 
 function TasksView({ data, setData }) {
-  const BLANK = { emoji: "🧹", title: "", stars: 1, recurring: "daily" };
+  const BLANK = { emoji: "🧹", title: "", stars: 1, recurring: "daily", childIds: [], shared: false };
   const [showAdd, setShowAdd] = useState(false);
   const [editTask, setEditTask] = useState(null);
 
@@ -684,6 +737,9 @@ function TasksView({ data, setData }) {
       <div style={{ display: "grid", gap: 12 }}>
         {data.tasks.map(task => {
           const rec = recurringLabel(task.recurring);
+          const assignedTo = (task.childIds || [])
+            .map(id => data.children.find(c => c.id === id))
+            .filter(Boolean);
           return (
             <Card key={task.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
               <span style={{ fontSize: 32 }}>{task.emoji}</span>
@@ -692,6 +748,12 @@ function TasksView({ data, setData }) {
                 <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
                   <Badge color={COLORS.sun}>⭐ {task.stars}</Badge>
                   <Badge color={rec.color}>{rec.badge}</Badge>
+                  <Badge color={COLORS.sky}>
+                    {assignedTo.length === 0
+                      ? "👨‍👩‍👧‍👦 Alle"
+                      : assignedTo.map(c => `${c.avatar} ${c.name}`).join(", ")}
+                  </Badge>
+                  {task.shared && <Badge color={COLORS.lavender}>🤝 Einer reicht</Badge>}
                 </div>
               </div>
               <EditDeleteBtns onEdit={() => setEditTask(task)} onDelete={() => deleteTask(task.id)} />
@@ -702,13 +764,17 @@ function TasksView({ data, setData }) {
 
       {showAdd && (
         <Modal title="Neue Aufgabe" onClose={() => setShowAdd(false)}>
-          <TaskForm initial={BLANK} onSave={addTask} onCancel={() => setShowAdd(false)} />
+          <TaskForm initial={BLANK} childrenList={data.children} onSave={addTask} onCancel={() => setShowAdd(false)} />
         </Modal>
       )}
       {editTask && (
         <Modal title="Aufgabe bearbeiten" onClose={() => setEditTask(null)}>
           <TaskForm
-            initial={{ emoji: editTask.emoji, title: editTask.title, stars: editTask.stars, recurring: editTask.recurring }}
+            initial={{
+              emoji: editTask.emoji, title: editTask.title, stars: editTask.stars, recurring: editTask.recurring,
+              childIds: editTask.childIds || [], shared: !!editTask.shared,
+            }}
+            childrenList={data.children}
             onSave={saveEdit} onCancel={() => setEditTask(null)}
           />
         </Modal>
@@ -794,7 +860,12 @@ function ChildrenView({ data, setData }) {
     setForm({ name: "", avatar: "🦊" });
   };
   const removeChild = (id) => {
-    const updated = { ...data, children: data.children.filter(c => c.id !== id) };
+    // Drop the child from every task assignment; a task left without any
+    // assignee falls back to "belongs to everyone" instead of vanishing.
+    const tasks = data.tasks.map(t =>
+      t.childIds?.includes(id) ? { ...t, childIds: t.childIds.filter(x => x !== id) } : t
+    );
+    const updated = { ...data, tasks, children: data.children.filter(c => c.id !== id) };
     setData(updated); saveData(updated);
     setDeleteConfirm(null);
   };
@@ -1312,10 +1383,6 @@ function AchievementsPanel({ data, childId, compact }) {
 
 function ChildDetail({ data, setData, childId, setView }) {
   const child = data.children.find(c => c.id === childId);
-  const todayStr = new Date().toDateString();
-  const doneToday = data.completions
-    .filter(c => c.childId === childId && new Date(c.date).toDateString() === todayStr)
-    .map(c => c.taskId);
 
   const redeemReward = (reward) => {
     if (child.stars < reward.cost) return;
@@ -1326,7 +1393,7 @@ function ChildDetail({ data, setData, childId, setView }) {
     setData(updated); saveData(updated);
   };
 
-  const dueTasks = data.tasks.filter(isTaskDueToday);
+  const dueTasks = dueTasksFor(data, childId);
 
   return (
     <div>
@@ -1339,13 +1406,22 @@ function ChildDetail({ data, setData, childId, setView }) {
       <h3>Heutige Erledigungen</h3>
       <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
         {dueTasks.map(task => {
-          const done = doneToday.includes(task.id);
+          const completion = taskCompletion(data, task, childId);
+          const done = !!completion;
+          const byOther = done && completion.childId !== childId
+            ? data.children.find(c => c.id === completion.childId)
+            : null;
           return (
             <Card key={task.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", opacity: done ? 0.6 : 1, borderLeft: `4px solid ${done ? COLORS.mint : "#eee"}` }}>
               <span style={{ fontSize: 26 }}>{task.emoji}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600 }}>{task.title}</div>
                 <Badge color={COLORS.sun}>+{task.stars}⭐</Badge>
+                {byOther && (
+                  <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                    von {byOther.avatar} {byOther.name} erledigt
+                  </div>
+                )}
               </div>
               {done && <span style={{ color: COLORS.mint, fontSize: 22 }}>✅</span>}
             </Card>
@@ -1477,10 +1553,6 @@ function AutoRedirect({ onRedirect }) {
 
 function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   const child = data.children.find(c => c.id === childId);
-  const todayStr = new Date().toDateString();
-  const doneToday = data.completions
-    .filter(c => c.childId === childId && new Date(c.date).toDateString() === todayStr)
-    .map(c => c.taskId);
   const [celebrating, setCelebrating] = useState(null);
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
@@ -1509,15 +1581,12 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   };
   const isTablet = useIsTablet();
 
-  const dueTasks = data.tasks.filter(task => {
-    if (!isTaskDueToday(task)) return false;
-    if (task.recurring === "weekly") return !completedThisWeek(data.completions, task.id, childId);
-    return true;
-  });
-
-  const isDone = (task) => {
-    if (task.recurring === "weekly") return completedThisWeek(data.completions, task.id, childId);
-    return doneToday.includes(task.id);
+  const isDone = (task) => !!taskCompletion(data, task, childId);
+  // A shared task another child already did: shown as done, but not undoable here.
+  const doneByOther = (task) => {
+    const completion = taskCompletion(data, task, childId);
+    if (!completion || completion.childId === childId) return null;
+    return data.children.find(c => c.id === completion.childId) || null;
   };
 
   const completeTask = (task) => {
@@ -1567,7 +1636,7 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
     redeemReward(reward);
   };
 
-  const allDueToday = data.tasks.filter(isTaskDueToday);
+  const allDueToday = dueTasksFor(data, childId);
   const doneTasks = allDueToday.filter(isDone).length;
   const totalTasks = allDueToday.length;
   const progress = totalTasks > 0 ? (doneTasks / totalTasks) * 100 : 0;
@@ -1579,15 +1648,20 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
       <div style={{ display: "grid", gap: 12, marginBottom: isTablet ? 0 : 24 }}>
         {allDueToday.map(task => {
           const done = isDone(task);
+          const byOther = doneByOther(task);
           const isCelebrating = celebrating === task.id;
           const rec = recurringLabel(task.recurring);
           return (
-            <div key={task.id} onClick={() => done ? setUndoTarget(task) : completeTask(task)}
+            <div key={task.id} onClick={() => {
+              if (byOther) return;
+              if (done) setUndoTarget(task);
+              else completeTask(task);
+            }}
               style={{
                 background: done ? COLORS.mint + "22" : "white",
                 borderRadius: 18, padding: "16px 20px",
                 display: "flex", alignItems: "center", gap: 14,
-                cursor: "pointer",
+                cursor: byOther ? "default" : "pointer",
                 border: `2px solid ${done ? COLORS.mint : "#eee"}`,
                 boxShadow: done ? "none" : "0 4px 16px #0001",
                 animation: isCelebrating ? "taskBounce 0.5s ease" : "none",
@@ -1600,10 +1674,16 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
                 <div style={{ fontWeight: 700, fontSize: 16, textDecoration: done ? "line-through" : "none", color: done ? "#888" : COLORS.dark }}>
                   {task.title}
                 </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13, color: "#666" }}>+{task.stars}⭐</span>
                   <Badge color={rec.color}>{rec.badge}</Badge>
+                  {task.shared && !done && <Badge color={COLORS.lavender}>🤝 Einer reicht</Badge>}
                 </div>
+                {byOther && (
+                  <div style={{ fontSize: 13, color: "#888", marginTop: 3 }}>
+                    ✅ von {byOther.avatar} {byOther.name} erledigt
+                  </div>
+                )}
               </div>
               {!done && <span style={{ fontSize: 22, color: "#ddd" }}>→</span>}
               {isCelebrating && <span style={{ fontSize: 28 }}>🎊</span>}
