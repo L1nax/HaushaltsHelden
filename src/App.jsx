@@ -1692,6 +1692,22 @@ function SettingsView({ data, setData, familyId }) {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [kioskActive, setKioskActive] = useState(() => localStorage.getItem("kioskMode") === "child");
+  const [kioskChildId, setKioskChildId] = useState(() => localStorage.getItem("kioskChild") || "");
+
+  const activateKiosk = (childId) => {
+    localStorage.setItem("kioskMode", "child");
+    if (childId) localStorage.setItem("kioskChild", childId);
+    else localStorage.removeItem("kioskChild");
+    setKioskChildId(childId || "");
+    setKioskActive(true);
+  };
+
+  const deactivateKiosk = () => {
+    localStorage.removeItem("kioskMode");
+    localStorage.removeItem("kioskChild");
+    setKioskChildId("");
+    setKioskActive(false);
+  };
 
   const copyId = () => {
     navigator.clipboard.writeText(familyId).then(() => {
@@ -1787,15 +1803,50 @@ function SettingsView({ data, setData, familyId }) {
           </div>
         </div>
         {kioskActive ? (
-          <Btn outline color={COLORS.rose} onClick={() => {
-            localStorage.removeItem("kioskMode");
-            localStorage.removeItem("kioskChild");
-            setKioskActive(false);
-          }}>Kiosk-Modus deaktivieren</Btn>
+          <>
+            {data.children.length > 1 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#666", marginBottom: 6 }}>Startet mit Kind:</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button onClick={() => activateKiosk("")}
+                    style={{
+                      padding: "6px 12px", borderRadius: 10, fontSize: 13, cursor: "pointer",
+                      border: `2px solid ${!kioskChildId ? COLORS.lavender : "#ddd"}`,
+                      background: !kioskChildId ? COLORS.lavender + "22" : "white",
+                      color: !kioskChildId ? COLORS.lavender : "#666", fontWeight: 700,
+                    }}>Auswahl beim Start</button>
+                  {data.children.map(c => (
+                    <button key={c.id} onClick={() => activateKiosk(c.id)}
+                      style={{
+                        padding: "6px 12px", borderRadius: 10, fontSize: 13, cursor: "pointer",
+                        border: `2px solid ${kioskChildId === c.id ? COLORS.lavender : "#ddd"}`,
+                        background: kioskChildId === c.id ? COLORS.lavender + "22" : "white",
+                        color: kioskChildId === c.id ? COLORS.lavender : "#666", fontWeight: 700,
+                      }}>{c.avatar} {c.name}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <Btn outline color={COLORS.rose} onClick={deactivateKiosk}>Kiosk-Modus deaktivieren</Btn>
+          </>
         ) : (
-          <div style={{ fontSize: 13, color: "#666" }}>
-            Zum Aktivieren die App einmal mit <code style={{ background: "#f5f5f5", padding: "2px 6px", borderRadius: 4 }}>?mode=child</code> in der URL öffnen.
-          </div>
+          <>
+            <div style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
+              Nur auf diesem Gerät. Nach dem Aktivieren startet die App immer direkt im Kindermodus. PIN nicht vergessen, damit die Kinder nicht in den Elternbereich kommen.
+            </div>
+            {data.children.length > 1 ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Btn color={COLORS.mint} onClick={() => activateKiosk("")}>Aktivieren (Auswahl beim Start)</Btn>
+                {data.children.map(c => (
+                  <Btn key={c.id} outline color={COLORS.mint} onClick={() => activateKiosk(c.id)}>
+                    {c.avatar} {c.name}
+                  </Btn>
+                ))}
+              </div>
+            ) : (
+              <Btn color={COLORS.mint} onClick={() => activateKiosk(data.children[0]?.id || "")}>Kiosk-Modus aktivieren</Btn>
+            )}
+          </>
         )}
       </Card>
 
