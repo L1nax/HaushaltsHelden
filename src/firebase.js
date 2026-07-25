@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { getMessaging, isSupported } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_kwBN3qnuep2jUNrGAhLgU02hAP-MGdc",
@@ -13,6 +14,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+// VAPID Public Key aus Firebase Console → Project Settings → Cloud Messaging →
+// Web Push certificates. In .env.local als VITE_FIREBASE_VAPID_KEY hinterlegen.
+export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
+
+let _messaging = null;
+export async function getMessagingIfSupported() {
+  if (_messaging) return _messaging;
+  if (!(await isSupported())) return null;
+  _messaging = getMessaging(app);
+  return _messaging;
+}
 
 // Each device gets a familyId stored in localStorage.
 // Share this ID across devices to sync data.

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { saveToFirestore, subscribeToFirestore, getFamilyId } from "./firebase.js";
+import { registerPush, unregisterPush } from "./push.js";
 
 function useMidnightTick() {
   const [, setTick] = useState(0);
@@ -307,13 +308,6 @@ function undoTaskCompletion(data, task, childId) {
   const refreshedChild = updated.children.find(c => c.id === childId);
   updated = addNotification(updated, "task", refreshedChild, `↩️ „${task.title}" rückgängig gemacht`);
   return updated;
-}
-
-async function requestPushPermission() {
-  if (!("Notification" in window)) return "unsupported";
-  if (Notification.permission === "granted") return "granted";
-  if (Notification.permission === "denied") return "denied";
-  return await Notification.requestPermission();
 }
 
 function Badge({ color, children }) {
@@ -2153,7 +2147,15 @@ export default function App() {
   const isTablet = useIsTablet();
   useMidnightTick();
 
-  useEffect(() => { requestPushPermission(); }, []);
+  // Kiosk-Geräte bekommen keine Push. Beim Wechsel in den childMode wird der Token
+  // aus Firestore entfernt, beim Verlassen neu registriert.
+  useEffect(() => {
+    if (view === "childMode") {
+      unregisterPush().catch(() => {});
+    } else {
+      registerPush().catch(() => {});
+    }
+  }, [view]);
 
   // If Firestore delivers the kids' data after mount (empty local storage on
   // first launch of a new device), retry the kiosk redirect once we have them.
