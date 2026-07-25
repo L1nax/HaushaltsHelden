@@ -38,6 +38,12 @@ export function getFamilyId() {
   return id;
 }
 
+// Checks whether a family document already exists, used before switching IDs.
+export async function familyExists(id) {
+  const snap = await getDoc(doc(db, "families", id));
+  return snap.exists();
+}
+
 export async function loadFromFirestore() {
   const id = getFamilyId();
   const snap = await getDoc(doc(db, "families", id));

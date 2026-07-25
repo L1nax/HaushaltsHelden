@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { saveToFirestore, subscribeToFirestore, getFamilyId } from "./firebase.js";
+import { saveToFirestore, subscribeToFirestore, getFamilyId, familyExists } from "./firebase.js";
 import { registerPush, unregisterPush } from "./push.js";
 
 function useMidnightTick() {
@@ -1795,6 +1795,9 @@ function SettingsView({ data, setData, familyId }) {
   const [copied, setCopied] = useState(false);
   const [kioskActive, setKioskActive] = useState(() => localStorage.getItem("kioskMode") === "child");
   const [kioskChildId, setKioskChildId] = useState(() => localStorage.getItem("kioskChild") || "");
+  const [joinId, setJoinId] = useState("");
+  const [joinChecking, setJoinChecking] = useState(false);
+  const [joinError, setJoinError] = useState("");
 
   const activateKiosk = (childId) => {
     localStorage.setItem("kioskMode", "child");
@@ -1828,6 +1831,35 @@ function SettingsView({ data, setData, familyId }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  // Only switch to an ID that really exists in Firestore — a typo would
+  // otherwise silently strand the device on an empty family.
+  const joinFamily = async () => {
+    const val = joinId.trim().toUpperCase();
+    if (val.length < 4) {
+      setJoinError("Bitte gib eine vollständige Familien-ID ein.");
+      return;
+    }
+    if (val === familyId) {
+      setJoinError("Das ist bereits deine Familien-ID.");
+      return;
+    }
+    setJoinError("");
+    setJoinChecking(true);
+    try {
+      if (!(await familyExists(val))) {
+        setJoinError("Diese Familien-ID existiert nicht. Bitte prüfe die Eingabe.");
+        setJoinChecking(false);
+        return;
+      }
+    } catch {
+      setJoinError("Prüfung fehlgeschlagen — bist du online?");
+      setJoinChecking(false);
+      return;
+    }
+    localStorage.setItem("familyId", val);
+    window.location.reload();
   };
 
   const savePin = (newPin) => {
@@ -1892,15 +1924,21 @@ function SettingsView({ data, setData, familyId }) {
         <div style={{ marginTop: 16, borderTop: "1px solid #eee", paddingTop: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#666" }}>Anderes Gerät verbinden</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input id="fam-id-input" placeholder="Familien-ID eingeben…"
-              style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 15, fontFamily: "monospace", letterSpacing: 2, textTransform: "uppercase" }} />
-            <Btn color={COLORS.mint} onClick={() => {
-              const val = document.getElementById("fam-id-input").value.trim().toUpperCase();
-              if (val.length < 4) return;
-              localStorage.setItem("familyId", val);
-              window.location.reload();
-            }}>Verbinden</Btn>
+            <input placeholder="Familien-ID eingeben…"
+              value={joinId}
+              onChange={(e) => { setJoinId(e.target.value); setJoinError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !joinChecking) joinFamily(); }}
+              disabled={joinChecking}
+              style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${joinError ? COLORS.rose : "#ddd"}`, fontSize: 15, fontFamily: "monospace", letterSpacing: 2, textTransform: "uppercase" }} />
+            <Btn color={COLORS.mint} onClick={joinFamily} disabled={joinChecking}>
+              {joinChecking ? "Prüfe…" : "Verbinden"}
+            </Btn>
           </div>
+          {joinError && (
+            <div style={{ marginTop: 10, background: COLORS.rose + "22", borderRadius: 10, padding: "10px 14px", color: COLORS.rose, fontWeight: 600, fontSize: 13 }}>
+              ⚠️ {joinError}
+            </div>
+          )}
         </div>
       </Card>
 
