@@ -1696,8 +1696,14 @@ function SettingsView({ data, setData, familyId }) {
 
   const activateKiosk = (childId) => {
     localStorage.setItem("kioskMode", "child");
-    if (childId) localStorage.setItem("kioskChild", childId);
-    else localStorage.removeItem("kioskChild");
+    if (childId) {
+      localStorage.setItem("kioskChild", childId);
+      const c = data.children.find(x => x.id === childId);
+      if (c) localStorage.setItem("kioskChildName", c.name);
+    } else {
+      localStorage.removeItem("kioskChild");
+      localStorage.removeItem("kioskChildName");
+    }
     setKioskChildId(childId || "");
     setKioskActive(true);
   };
@@ -1705,9 +1711,15 @@ function SettingsView({ data, setData, familyId }) {
   const deactivateKiosk = () => {
     localStorage.removeItem("kioskMode");
     localStorage.removeItem("kioskChild");
+    localStorage.removeItem("kioskChildName");
     setKioskChildId("");
     setKioskActive(false);
   };
+
+  const activeChild = kioskActive
+    ? (kioskChildId ? data.children.find(c => c.id === kioskChildId) : null)
+    : null;
+  const storedChildName = kioskActive ? localStorage.getItem("kioskChildName") : null;
 
   const copyId = () => {
     navigator.clipboard.writeText(familyId).then(() => {
@@ -1797,7 +1809,11 @@ function SettingsView({ data, setData, familyId }) {
             <div style={{ fontWeight: 700, fontSize: 16 }}>Kiosk-Modus (Wand-Tablet)</div>
             <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
               {kioskActive
-                ? "Aktiv — dieses Gerät startet automatisch im Kindermodus."
+                ? activeChild
+                  ? `Aktiv — startet direkt mit ${activeChild.avatar} ${activeChild.name}.`
+                  : storedChildName
+                    ? `Aktiv — gespeichertes Kind „${storedChildName}" nicht mehr in der Liste, Auswahl beim Start.`
+                    : "Aktiv — Auswahl beim Start."
                 : "Inaktiv — dieses Gerät startet normal im Elternbereich."}
             </div>
           </div>
@@ -1962,10 +1978,15 @@ function resolveInitialKiosk(children) {
   if (!active) return { view: "overview", selectedChild: null, showPicker: false };
   const kids = children || [];
   const hint = params.get("child") || localStorage.getItem("kioskChild");
+  const nameHint = localStorage.getItem("kioskChildName");
   let target = null;
   if (hint) {
     const h = hint.toLowerCase();
     target = kids.find(c => c.id === hint || (c.name || "").toLowerCase() === h);
+  }
+  if (!target && nameHint) {
+    const n = nameHint.toLowerCase();
+    target = kids.find(c => (c.name || "").toLowerCase() === n);
   }
   if (!target && kids.length === 1) target = kids[0];
   if (target) return { view: "childMode", selectedChild: target.id, showPicker: false };
@@ -2030,10 +2051,15 @@ export default function App() {
     if (kids.length === 0) return;
     kioskRetried.current = true;
     const hint = localStorage.getItem("kioskChild");
+    const nameHint = localStorage.getItem("kioskChildName");
     let target = null;
     if (hint) {
       const h = hint.toLowerCase();
       target = kids.find(c => c.id === hint || (c.name || "").toLowerCase() === h);
+    }
+    if (!target && nameHint) {
+      const n = nameHint.toLowerCase();
+      target = kids.find(c => (c.name || "").toLowerCase() === n);
     }
     if (!target && kids.length === 1) target = kids[0];
     if (target) {
@@ -2288,51 +2314,6 @@ export default function App() {
         <span style={{ color: "white", fontWeight: 800, fontSize: 18 }}>Haushalts-Helden</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {data.pin && <span style={{ color: COLORS.mint, fontSize: 12 }}>🔒</span>}
-          {data.children.length > 0 && (
-            <div style={{ position: "relative" }}>
-              <button
-                onClick={() => data.children.length === 1
-                  ? goToChildMode(data.children[0].id)
-                  : setShowChildPicker(p => !p)}
-                style={{
-                  background: "rgba(255,255,255,0.13)", border: "1.5px solid rgba(255,255,255,0.28)",
-                  borderRadius: 10, padding: "6px 12px", color: "white",
-                  fontSize: 12, fontWeight: 700, cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
-                }}>
-                {data.children.length === 1
-                  ? <>{data.children[0].avatar} Kindansicht</>
-                  : <>👦 Kindansicht {showChildPicker ? "▲" : "▼"}</>}
-              </button>
-              {showChildPicker && data.children.length > 1 && (
-                <div style={{
-                  position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 300,
-                  background: "white", borderRadius: 14, padding: 8,
-                  boxShadow: "0 8px 28px rgba(0,0,0,0.15)", minWidth: 190,
-                  border: "1px solid #eee",
-                }}>
-                  <div style={{ fontSize: 11, color: "#bbb", fontWeight: 700, padding: "4px 14px 8px", textTransform: "uppercase", letterSpacing: 0.8 }}>
-                    Kind auswählen
-                  </div>
-                  {data.children.map(child => (
-                    <button key={child.id}
-                      onClick={() => { goToChildMode(child.id); setShowChildPicker(false); }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10, width: "100%",
-                        background: "none", border: "none", padding: "10px 14px",
-                        cursor: "pointer", fontSize: 15, fontWeight: 700,
-                        color: COLORS.dark, borderRadius: 10, textAlign: "left",
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = "#f5f5f5"}
-                      onMouseLeave={e => e.currentTarget.style.background = "none"}>
-                      <span style={{ fontSize: 22 }}>{child.avatar}</span>
-                      {child.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           <NotificationBell data={data} setData={setData} onClick={openNotifications} />
         </div>
       </div>
