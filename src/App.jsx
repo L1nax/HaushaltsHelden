@@ -1944,14 +1944,44 @@ function NotificationsView({ data, setData }) {
   );
 }
 
+function resolveInitialKiosk(children) {
+  const params = new URLSearchParams(window.location.search);
+  const urlMode = params.get("mode");
+  if (urlMode === "parent") {
+    localStorage.removeItem("kioskMode");
+    localStorage.removeItem("kioskChild");
+    return { view: "overview", selectedChild: null, showPicker: false };
+  }
+  if (urlMode === "child") {
+    localStorage.setItem("kioskMode", "child");
+    const urlChild = params.get("child");
+    if (urlChild) localStorage.setItem("kioskChild", urlChild);
+    else localStorage.removeItem("kioskChild");
+  }
+  const active = localStorage.getItem("kioskMode") === "child";
+  if (!active) return { view: "overview", selectedChild: null, showPicker: false };
+  const kids = children || [];
+  const hint = params.get("child") || localStorage.getItem("kioskChild");
+  let target = null;
+  if (hint) {
+    const h = hint.toLowerCase();
+    target = kids.find(c => c.id === hint || (c.name || "").toLowerCase() === h);
+  }
+  if (!target && kids.length === 1) target = kids[0];
+  if (target) return { view: "childMode", selectedChild: target.id, showPicker: false };
+  return { view: "overview", selectedChild: null, showPicker: kids.length > 1 };
+}
+
 export default function App() {
   const [data, setData] = useState(() => ensureFields(loadDataLocal() ?? DEFAULT_DATA));
+  const initialKiosk = useRef(null);
+  if (initialKiosk.current === null) initialKiosk.current = resolveInitialKiosk(data.children);
   const [loading, setLoading] = useState(true);
   const [familyId] = useState(() => getFamilyId());
-  const [view, setView] = useState("overview");
-  const [selectedChild, setSelectedChild] = useState(null);
+  const [view, setView] = useState(initialKiosk.current.view);
+  const [selectedChild, setSelectedChild] = useState(initialKiosk.current.selectedChild);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showChildPicker, setShowChildPicker] = useState(false);
+  const [showChildPicker, setShowChildPicker] = useState(initialKiosk.current.showPicker);
   const [noPinWarning, setNoPinWarning] = useState(null); // { childId }
   const [noPinWarningSuppressed] = useState(() => localStorage.getItem("noPinWarningSuppressed") === "true");
   const [noPinWarningCheck, setNoPinWarningCheck] = useState(false);
@@ -1989,50 +2019,30 @@ export default function App() {
 
   useEffect(() => { requestPushPermission(); }, []);
 
-  // Auto-enter child mode via URL param (?mode=child[&child=NameOrId]) or via
-  // a persisted kiosk flag in localStorage. This makes the wall tablet boot
-  // into child mode even after iOS strips URL params on PWA installs.
-  // Use ?mode=parent to clear the flag.
-  const autoChildHandled = useRef(false);
+  // If Firestore delivers the kids' data after mount (empty local storage on
+  // first launch of a new device), retry the kiosk redirect once we have them.
+  const kioskRetried = useRef(false);
   useEffect(() => {
-    if (loading || autoChildHandled.current) return;
-    const params = new URLSearchParams(window.location.search);
-    const urlMode = params.get("mode");
-
-    if (urlMode === "parent") {
-      localStorage.removeItem("kioskMode");
-      localStorage.removeItem("kioskChild");
-      autoChildHandled.current = true;
-      return;
-    }
-
-    if (urlMode === "child") {
-      localStorage.setItem("kioskMode", "child");
-      const wanted = params.get("child");
-      if (wanted) localStorage.setItem("kioskChild", wanted);
-      else localStorage.removeItem("kioskChild");
-    }
-
-    const kiosk = localStorage.getItem("kioskMode") === "child" || urlMode === "child";
-    if (!kiosk) return;
-    autoChildHandled.current = true;
-
-    const children = data.children || [];
-    if (children.length === 0) return;
-    const wanted = params.get("child") || localStorage.getItem("kioskChild");
+    if (kioskRetried.current || loading) return;
+    if (view !== "overview" || selectedChild) return;
+    if (localStorage.getItem("kioskMode") !== "child") return;
+    const kids = data.children || [];
+    if (kids.length === 0) return;
+    kioskRetried.current = true;
+    const hint = localStorage.getItem("kioskChild");
     let target = null;
-    if (wanted) {
-      const w = wanted.toLowerCase();
-      target = children.find(c => c.id === wanted || c.name.toLowerCase() === w);
+    if (hint) {
+      const h = hint.toLowerCase();
+      target = kids.find(c => c.id === hint || (c.name || "").toLowerCase() === h);
     }
-    if (!target && children.length === 1) target = children[0];
+    if (!target && kids.length === 1) target = kids[0];
     if (target) {
       setSelectedChild(target.id);
       setView("childMode");
-    } else {
+    } else if (kids.length > 1) {
       setShowChildPicker(true);
     }
-  }, [loading, data.children]);
+  }, [loading, data.children, view, selectedChild]);
 
   const openNotifications = () => {
     setShowNotifications(true);
