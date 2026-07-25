@@ -248,6 +248,67 @@ function checkAchievements(data, childId) {
   return updated;
 }
 
+// Reverses a completed task: removes the completion, refunds the task's stars,
+// and revokes any achievement unlocks that no longer meet their target as a result.
+function undoTaskCompletion(data, task, childId) {
+  const child = (data.children || []).find(c => c.id === childId);
+  if (!child) return data;
+
+  let completionToRemove;
+  if (task.recurring === "weekly") {
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    const day = now.getDay() === 0 ? 6 : now.getDay() - 1;
+    startOfWeek.setDate(now.getDate() - day);
+    startOfWeek.setHours(0, 0, 0, 0);
+    completionToRemove = (data.completions || []).find(c =>
+      c.taskId === task.id && c.childId === childId && new Date(c.date) >= startOfWeek
+    );
+  } else {
+    const todayStr = new Date().toDateString();
+    completionToRemove = (data.completions || []).find(c =>
+      c.taskId === task.id && c.childId === childId && new Date(c.date).toDateString() === todayStr
+    );
+  }
+  if (!completionToRemove) return data;
+
+  let updated = {
+    ...data,
+    completions: data.completions.filter(c => c.id !== completionToRemove.id),
+    children: data.children.map(c =>
+      c.id === childId ? { ...c, stars: Math.max(0, c.stars - (task.stars || 0)) } : c
+    ),
+  };
+
+  const achievementsById = new Map((updated.achievements || []).map(a => [a.id, a]));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const u of (updated.unlockedAchievements || [])) {
+      if (u.childId !== childId) continue;
+      const ach = achievementsById.get(u.achievementId);
+      if (!ach) continue;
+      const withoutThis = {
+        ...updated,
+        unlockedAchievements: updated.unlockedAchievements.filter(x => x.id !== u.id),
+        children: updated.children.map(c =>
+          c.id === childId ? { ...c, stars: Math.max(0, c.stars - (u.starReward || 0)) } : c
+        ),
+      };
+      const progress = achievementProgress(withoutThis, childId, ach);
+      if (progress < ach.target) {
+        updated = withoutThis;
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  const refreshedChild = updated.children.find(c => c.id === childId);
+  updated = addNotification(updated, "task", refreshedChild, `↩️ „${task.title}" rückgängig gemacht`);
+  return updated;
+}
+
 async function requestPushPermission() {
   if (!("Notification" in window)) return "unsupported";
   if (Notification.permission === "granted") return "granted";
@@ -1405,6 +1466,8 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   const [showAchievements, setShowAchievements] = useState(false);
   const [unlockQueue, setUnlockQueue] = useState([]);
   const [dayCompleteBurst, setDayCompleteBurst] = useState(0);
+  const [undoTarget, setUndoTarget] = useState(null);
+  const [redeemTarget, setRedeemTarget] = useState(null);
 
   const queueNewUnlocks = (before, after) => {
     const prevIds = new Set(
@@ -1459,6 +1522,13 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
     setTimeout(() => setCelebrating(null), 1500);
   };
 
+  const confirmUndo = () => {
+    if (!undoTarget) return;
+    const updated = undoTaskCompletion(data, undoTarget, childId);
+    setUndoTarget(null);
+    setData(updated); saveData(updated);
+  };
+
   const redeemReward = (reward) => {
     if (child.stars < reward.cost) return;
     const updChildren = data.children.map(c => c.id === childId ? { ...c, stars: c.stars - reward.cost } : c);
@@ -1468,6 +1538,13 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
     updated = checkAchievements(updated, childId);
     queueNewUnlocks(data, updated);
     setData(updated); saveData(updated);
+  };
+
+  const confirmRedeem = () => {
+    if (!redeemTarget) return;
+    const reward = redeemTarget;
+    setRedeemTarget(null);
+    redeemReward(reward);
   };
 
   const allDueToday = data.tasks.filter(isTaskDueToday);
@@ -1485,12 +1562,12 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
           const isCelebrating = celebrating === task.id;
           const rec = recurringLabel(task.recurring);
           return (
-            <div key={task.id} onClick={() => !done && completeTask(task)}
+            <div key={task.id} onClick={() => done ? setUndoTarget(task) : completeTask(task)}
               style={{
                 background: done ? COLORS.mint + "22" : "white",
                 borderRadius: 18, padding: "16px 20px",
                 display: "flex", alignItems: "center", gap: 14,
-                cursor: done ? "default" : "pointer",
+                cursor: "pointer",
                 border: `2px solid ${done ? COLORS.mint : "#eee"}`,
                 boxShadow: done ? "none" : "0 4px 16px #0001",
                 animation: isCelebrating ? "taskBounce 0.5s ease" : "none",
@@ -1542,7 +1619,7 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
                 <div style={{ fontWeight: 700 }}>{reward.title}</div>
                 <span style={{ fontSize: 13, color: COLORS.sun, fontWeight: 700 }}>⭐ {reward.cost}</span>
               </div>
-              <Btn small color={COLORS.lavender} disabled={!canAfford} onClick={() => redeemReward(reward)}>
+              <Btn small color={COLORS.lavender} disabled={!canAfford} onClick={() => setRedeemTarget(reward)}>
                 {canAfford ? "Holen!" : "Noch nicht"}
               </Btn>
             </div>
@@ -1682,6 +1759,37 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
       )}
 
       {dayCompleteBurst > 0 && <ConfettiBurst key={dayCompleteBurst} />}
+
+      {redeemTarget && (
+        <Modal title="Belohnung einlösen?" onClose={() => setRedeemTarget(null)}>
+          <div style={{ fontSize: 15, color: COLORS.dark, lineHeight: 1.5 }}>
+            Möchtest du <strong>{redeemTarget.emoji} „{redeemTarget.title}"</strong> wirklich einlösen?
+            <div style={{ marginTop: 10, color: "#666", fontSize: 14 }}>
+              Es werden <strong>{redeemTarget.cost}⭐</strong> von deinem Guthaben abgezogen.
+              Danach hast du noch <strong>{Math.max(0, child.stars - redeemTarget.cost)}⭐</strong>.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+            <Btn outline color={COLORS.dark} onClick={() => setRedeemTarget(null)}>Abbrechen</Btn>
+            <Btn color={COLORS.lavender} onClick={confirmRedeem}>Ja, einlösen</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {undoTarget && (
+        <Modal title="Aufgabe rückgängig machen?" onClose={() => setUndoTarget(null)}>
+          <div style={{ fontSize: 15, color: COLORS.dark, lineHeight: 1.5 }}>
+            Möchtest du <strong>{undoTarget.emoji} „{undoTarget.title}"</strong> wirklich zurücksetzen?
+            <div style={{ marginTop: 10, color: "#666", fontSize: 14 }}>
+              Die <strong>{undoTarget.stars}⭐</strong> werden abgezogen. Erfolge, die dadurch nicht mehr erfüllt sind, werden ebenfalls zurückgenommen.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+            <Btn outline color={COLORS.dark} onClick={() => setUndoTarget(null)}>Abbrechen</Btn>
+            <Btn color={COLORS.coral} onClick={confirmUndo}>Ja, rückgängig</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -2094,7 +2202,7 @@ export default function App() {
 
   if (loading) return (
     <div style={{ fontFamily: "'Nunito', sans-serif", minHeight: "100vh", background: COLORS.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-      <img src="/icon.png" alt="" style={{ width: 72, height: 72, animation: "softPulse 1.6s ease-in-out infinite" }} />
+      <img src="/icon.v2.png" alt="" style={{ width: 72, height: 72, animation: "softPulse 1.6s ease-in-out infinite" }} />
       <div style={{ fontWeight: 800, fontSize: 20, color: COLORS.dark }}>Haushalts-Helden</div>
       <div style={{ color: "#888", fontSize: 14 }}>Daten werden geladen…</div>
     </div>
@@ -2256,7 +2364,7 @@ export default function App() {
         <div style={{ width: 220, background: COLORS.dark, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
           <div style={{ padding: "22px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <img src="/icon.png" alt="" style={{ width: 32, height: 32 }} />
+              <img src="/icon.v2.png" alt="" style={{ width: 32, height: 32 }} />
               <span style={{ color: "white", fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>Haushalts-<br />Helden</span>
             </div>
           </div>
@@ -2317,7 +2425,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: "'Nunito', sans-serif", maxWidth: 720, margin: "0 auto", minHeight: "100vh", background: COLORS.cream }}>
       <div style={{ background: COLORS.dark, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-        <img src="/icon.png" alt="" style={{ width: 32, height: 32 }} />
+        <img src="/icon.v2.png" alt="" style={{ width: 32, height: 32 }} />
         <span style={{ color: "white", fontWeight: 800, fontSize: 18 }}>Haushalts-Helden</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {data.pin && <span style={{ color: COLORS.mint, fontSize: 12 }}>🔒</span>}
