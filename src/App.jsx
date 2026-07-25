@@ -1628,12 +1628,12 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   const totalAchCount = enabledAchievements.length;
 
   const header = (
-    <div style={{ background: `linear-gradient(135deg, ${COLORS.sky}, ${COLORS.mint})`, padding: "24px 20px 30px", borderRadius: isTablet ? "0 0 30px 30px" : "0 0 30px 30px" }}>
+    <div style={{ flexShrink: 0, background: `linear-gradient(135deg, ${COLORS.sky}, ${COLORS.mint})`, padding: isTablet ? "24px 20px 30px" : "16px 16px 20px", borderRadius: "0 0 30px 30px" }}>
       <div style={{ maxWidth: isTablet ? 1100 : undefined, margin: isTablet ? "0 auto" : undefined }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <div style={{ color: "white", opacity: 0.85, fontSize: 14, marginBottom: 4 }}>Hallo!</div>
-            <div style={{ color: "white", fontSize: isTablet ? 32 : 28, fontWeight: 900 }}>{child.avatar} {child.name}</div>
+            {isTablet && <div style={{ color: "white", opacity: 0.85, fontSize: 14, marginBottom: 4 }}>Hallo!</div>}
+            <div style={{ color: "white", fontSize: isTablet ? 32 : 24, fontWeight: 900 }}>{child.avatar} {child.name}</div>
           </div>
           <button onClick={() => setShowPinDialog(true)}
             style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 12, padding: "8px 14px", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -1641,7 +1641,7 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginTop: isTablet ? 16 : 12 }}>
           {data.children.length > 1 && (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {data.children.map(c => {
@@ -1664,27 +1664,27 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
             </div>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 16, padding: "12px 20px", display: "inline-flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 32, animation: "starGlow 2s ease-in-out infinite", display: "inline-block" }}>⭐</span>
+            <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 16, padding: isTablet ? "12px 20px" : "9px 14px", display: "inline-flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: isTablet ? 32 : 26, animation: "starGlow 2s ease-in-out infinite", display: "inline-block" }}>⭐</span>
               <div>
-                <div style={{ color: "white", fontSize: 30, fontWeight: 900, lineHeight: 1 }}>{child.stars}</div>
-                <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>Sterne gesammelt</div>
+                <div style={{ color: "white", fontSize: isTablet ? 30 : 24, fontWeight: 900, lineHeight: 1 }}>{child.stars}</div>
+                <div style={{ color: "rgba(255,255,255,0.85)", fontSize: isTablet ? 13 : 12 }}>Sterne gesammelt</div>
               </div>
             </div>
             {totalAchCount > 0 && (
               <button onClick={() => setShowAchievements(true)}
                 style={{
                   background: "rgba(255,255,255,0.25)", border: "none",
-                  borderRadius: 16, padding: "12px 20px",
+                  borderRadius: 16, padding: isTablet ? "12px 20px" : "9px 14px",
                   display: "inline-flex", alignItems: "center", gap: 10,
                   cursor: "pointer", color: "white",
                 }}>
-                <span style={{ fontSize: 32 }}>🏆</span>
+                <span style={{ fontSize: isTablet ? 32 : 26 }}>🏆</span>
                 <div style={{ textAlign: "left" }}>
-                  <div style={{ color: "white", fontSize: 30, fontWeight: 900, lineHeight: 1 }}>
-                    {unlockedAchCount}<span style={{ fontSize: 18, opacity: 0.75 }}>/{totalAchCount}</span>
+                  <div style={{ color: "white", fontSize: isTablet ? 30 : 24, fontWeight: 900, lineHeight: 1 }}>
+                    {unlockedAchCount}<span style={{ fontSize: isTablet ? 18 : 15, opacity: 0.75 }}>/{totalAchCount}</span>
                   </div>
-                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>Erfolge</div>
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: isTablet ? 13 : 12 }}>Erfolge</div>
                 </div>
               </button>
             )}
@@ -1710,7 +1710,7 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${COLORS.sky}22, ${COLORS.mint}22)` }}>
+    <div style={{ height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column", background: `linear-gradient(135deg, ${COLORS.sky}22, ${COLORS.mint}22)` }}>
       {header}
 
       {showPinDialog && (
@@ -1720,19 +1720,19 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
       )}
 
       {isTablet ? (
-        // ── Tablet: 2-column layout ──────────────────────────────────────────
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 32px", display: "grid", gridTemplateColumns: "1fr 380px", gap: 28, alignItems: "start" }}>
-          <div>
+        // ── Tablet: 2-column layout, each column scrolls on its own ──────────
+        <div style={{ flex: 1, minHeight: 0, maxWidth: 1100, width: "100%", margin: "0 auto", padding: "24px 32px", display: "grid", gridTemplateColumns: "1fr 380px", gap: 28, boxSizing: "border-box" }}>
+          <div style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
             {progressCard}
             {taskList}
           </div>
-          <div style={{ position: "sticky", top: 24 }}>
+          <div style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
             {shopList}
           </div>
         </div>
       ) : (
         // ── Mobile: single column ─────────────────────────────────────────────
-        <div style={{ padding: "20px 16px" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "20px 16px" }}>
           {progressCard}
           {taskList}
           {shopList}
@@ -2270,6 +2270,7 @@ export default function App() {
       background: `linear-gradient(135deg, ${COLORS.dark} 0%, #2d3a52 100%)`,
       padding: "16px 20px",
       display: "flex", alignItems: "center", gap: 16,
+      flexShrink: 0,
     }}>
       <div style={{
         width: 52, height: 52, borderRadius: 14,
@@ -2399,9 +2400,9 @@ export default function App() {
   if (isTablet) {
     // ── Tablet layout: fixed sidebar + main ────────────────────────────────
     return (
-      <div style={{ fontFamily: "'Nunito', sans-serif", display: "flex", minHeight: "100vh", background: COLORS.cream }}>
+      <div style={{ fontFamily: "'Nunito', sans-serif", display: "flex", height: "100dvh", overflow: "hidden", background: COLORS.cream }}>
         {/* Sidebar */}
-        <div style={{ width: 220, background: COLORS.dark, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
+        <div style={{ width: 220, background: COLORS.dark, display: "flex", flexDirection: "column", flexShrink: 0, height: "100%", overflowY: "auto" }}>
           <div style={{ padding: "22px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <img src="/icon.v2.png" alt="" style={{ width: 32, height: 32 }} />
@@ -2445,10 +2446,12 @@ export default function App() {
         </div>
 
         {/* Main */}
-        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {pageHeader}
-          <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 36px", width: "100%" }}>
-            {content}
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+            <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 36px", width: "100%", boxSizing: "border-box" }}>
+              {content}
+            </div>
           </div>
         </div>
 
@@ -2463,8 +2466,8 @@ export default function App() {
 
   // ── Mobile layout: top header + bottom tabs ────────────────────────────────
   return (
-    <div style={{ fontFamily: "'Nunito', sans-serif", maxWidth: 720, margin: "0 auto", minHeight: "100vh", background: COLORS.cream }}>
-      <div style={{ background: COLORS.dark, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+    <div style={{ fontFamily: "'Nunito', sans-serif", maxWidth: 720, margin: "0 auto", height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column", background: COLORS.cream }}>
+      <div style={{ background: COLORS.dark, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
         <img src="/icon.v2.png" alt="" style={{ width: 32, height: 32 }} />
         <span style={{ color: "white", fontWeight: 800, fontSize: 18 }}>Haushalts-Helden</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
@@ -2481,7 +2484,7 @@ export default function App() {
 
       {pageHeader}
 
-      <div style={{ background: "white", display: "flex", borderBottom: "2px solid #f0f0f0" }}>
+      <div style={{ background: "white", display: "flex", borderBottom: "2px solid #f0f0f0", flexShrink: 0 }}>
         {NAV.map(n => (
           <button key={n.id} onClick={() => setView(n.id)}
             style={{
@@ -2498,7 +2501,7 @@ export default function App() {
         ))}
       </div>
 
-      <div style={{ padding: 24 }}>{content}</div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: 24 }}>{content}</div>
       {noPinWarningModal}
       <style>{`@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
     </div>
