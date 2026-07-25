@@ -14,7 +14,7 @@ export default defineConfig({
         short_name: 'HH',
         description: 'Familien-Aufgaben und Belohnungen',
         lang: 'de',
-        theme_color: '#863bff',
+        theme_color: '#1A1A2E',
         background_color: '#FFF8ED',
         display: 'standalone',
         orientation: 'portrait',

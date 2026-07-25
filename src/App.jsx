@@ -2017,6 +2017,13 @@ export default function App() {
     }
   };
 
+  // Match the iOS/Android status bar color to the current view's header
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    meta.setAttribute("content", view === "childMode" ? COLORS.sky : COLORS.dark);
+  }, [view]);
+
   // On mount: subscribe to live Firestore updates. First snapshot replaces
   // local data, subsequent snapshots apply changes from other devices.
   useEffect(() => {
