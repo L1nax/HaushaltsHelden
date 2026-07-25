@@ -1,2 +1,66 @@
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; }
+body {
+  margin: 0;
+  font-family: 'Nunito', sans-serif;
+}
+
+@keyframes taskBounce {
+  0%   { transform: scale(1); }
+  20%  { transform: scale(1.07); }
+  40%  { transform: scale(0.96); }
+  60%  { transform: scale(1.04); }
+  80%  { transform: scale(0.99); }
+  100% { transform: scale(1); }
+}
+
+@keyframes softPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.65; transform: scale(0.92); }
+}
+
+@keyframes starGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px #FFD93Dcc); }
+  50%       { filter: drop-shadow(0 0 14px #FFD93D) drop-shadow(0 0 28px #FFD93D88); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes achOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes achTrophyIn {
+  0%   { opacity: 0; transform: scale(0.2) rotate(-25deg); }
+  55%  { opacity: 1; transform: scale(1.25) rotate(8deg); }
+  75%  { transform: scale(0.92) rotate(-4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes achTrophyFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%       { transform: translateY(-10px) rotate(3deg); }
+}
+
+@keyframes achTextIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes achRayRotate {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes achConfetti {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); }
+}
