@@ -1691,6 +1691,7 @@ function SettingsView({ data, setData, familyId }) {
   const [showRemovePin, setShowRemovePin] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [kioskActive, setKioskActive] = useState(() => localStorage.getItem("kioskMode") === "child");
 
   const copyId = () => {
     navigator.clipboard.writeText(familyId).then(() => {
@@ -1771,6 +1772,31 @@ function SettingsView({ data, setData, familyId }) {
             }}>Verbinden</Btn>
           </div>
         </div>
+      </Card>
+
+      <Card style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 36 }}>📺</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Kiosk-Modus (Wand-Tablet)</div>
+            <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
+              {kioskActive
+                ? "Aktiv — dieses Gerät startet automatisch im Kindermodus."
+                : "Inaktiv — dieses Gerät startet normal im Elternbereich."}
+            </div>
+          </div>
+        </div>
+        {kioskActive ? (
+          <Btn outline color={COLORS.rose} onClick={() => {
+            localStorage.removeItem("kioskMode");
+            localStorage.removeItem("kioskChild");
+            setKioskActive(false);
+          }}>Kiosk-Modus deaktivieren</Btn>
+        ) : (
+          <div style={{ fontSize: 13, color: "#666" }}>
+            Zum Aktivieren die App einmal mit <code style={{ background: "#f5f5f5", padding: "2px 6px", borderRadius: 4 }}>?mode=child</code> in der URL öffnen.
+          </div>
+        )}
       </Card>
 
       {showSetPin && (
@@ -1912,17 +1938,37 @@ export default function App() {
 
   useEffect(() => { requestPushPermission(); }, []);
 
-  // Auto-enter child mode via URL param (?mode=child[&child=NameOrId]).
-  // Runs once after initial data has loaded.
+  // Auto-enter child mode via URL param (?mode=child[&child=NameOrId]) or via
+  // a persisted kiosk flag in localStorage. This makes the wall tablet boot
+  // into child mode even after iOS strips URL params on PWA installs.
+  // Use ?mode=parent to clear the flag.
   const autoChildHandled = useRef(false);
   useEffect(() => {
     if (loading || autoChildHandled.current) return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("mode") !== "child") return;
+    const urlMode = params.get("mode");
+
+    if (urlMode === "parent") {
+      localStorage.removeItem("kioskMode");
+      localStorage.removeItem("kioskChild");
+      autoChildHandled.current = true;
+      return;
+    }
+
+    if (urlMode === "child") {
+      localStorage.setItem("kioskMode", "child");
+      const wanted = params.get("child");
+      if (wanted) localStorage.setItem("kioskChild", wanted);
+      else localStorage.removeItem("kioskChild");
+    }
+
+    const kiosk = localStorage.getItem("kioskMode") === "child" || urlMode === "child";
+    if (!kiosk) return;
     autoChildHandled.current = true;
+
     const children = data.children || [];
     if (children.length === 0) return;
-    const wanted = params.get("child");
+    const wanted = params.get("child") || localStorage.getItem("kioskChild");
     let target = null;
     if (wanted) {
       const w = wanted.toLowerCase();
