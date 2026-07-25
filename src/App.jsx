@@ -1912,6 +1912,31 @@ export default function App() {
 
   useEffect(() => { requestPushPermission(); }, []);
 
+  // Auto-enter child mode via URL param (?mode=child[&child=NameOrId]).
+  // Runs once after initial data has loaded.
+  const autoChildHandled = useRef(false);
+  useEffect(() => {
+    if (loading || autoChildHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") !== "child") return;
+    autoChildHandled.current = true;
+    const children = data.children || [];
+    if (children.length === 0) return;
+    const wanted = params.get("child");
+    let target = null;
+    if (wanted) {
+      const w = wanted.toLowerCase();
+      target = children.find(c => c.id === wanted || c.name.toLowerCase() === w);
+    }
+    if (!target && children.length === 1) target = children[0];
+    if (target) {
+      setSelectedChild(target.id);
+      setView("childMode");
+    } else {
+      setShowChildPicker(true);
+    }
+  }, [loading, data.children]);
+
   const openNotifications = () => {
     setShowNotifications(true);
     const updated = { ...data, notifications: (data.notifications || []).map(n => ({ ...n, read: true })) };
@@ -1924,7 +1949,7 @@ export default function App() {
     { id: "rewards",  label: "🎁 Shop",      icon: "🎁" },
     { id: "achievements", label: "🏆 Erfolge", icon: "🏆" },
     { id: "children", label: "👤 Kinder",    icon: "👤" },
-    { id: "settings", label: "⚙️ Einst.",    icon: "⚙️" },
+    { id: "settings", label: "⚙️ Einst.",    icon: "⚙️", sidebarLabel: "Einstellungen" },
   ];
 
   if (loading) return (
@@ -2111,7 +2136,7 @@ export default function App() {
                   cursor: "pointer", textAlign: "left", transition: "all .15s",
                 }}>
                 <span style={{ fontSize: 18 }}>{n.icon}</span>
-                {n.label.split(" ").slice(1).join(" ")}
+                {n.sidebarLabel || n.label.split(" ").slice(1).join(" ")}
               </button>
             ))}
           </nav>
