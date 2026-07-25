@@ -19,6 +19,17 @@ const COLORS = {
 
 const EMOJIS = ["🧹","🍽️","🛏️","🐕","🌿","🧺","🗑️","🚿","📚","🧴","🪣","🧽","🏠","🪟","🚗","🐈","🌻","🧸"];
 const REWARD_EMOJIS = ["🎮","🍕","🎬","🛍️","🍦","🎁","🎨","🏖️","🍫","🎡","🃏","🧩"];
+const ACHIEVEMENT_EMOJIS = ["🏆","🏅","🥇","🥈","🥉","🎯","⭐","🌟","💎","👑","🔥","⚡","🚀","💪","🎉","🎊","🦸","🧙","🐉","🚂","🎖️","🥳"];
+
+const ACHIEVEMENT_TYPES = [
+  { value: "tasks_total",      label: "Aufgaben insgesamt",        unit: "Aufgaben" },
+  { value: "stars_total",      label: "Sterne insgesamt gesammelt",unit: "Sterne" },
+  { value: "stars_current",    label: "Sterne im Guthaben",        unit: "Sterne" },
+  { value: "streak_days",      label: "Tage in Folge aktiv",       unit: "Tage" },
+  { value: "tasks_day",        label: "Aufgaben an einem Tag",     unit: "Aufgaben" },
+  { value: "rewards_redeemed", label: "Belohnungen eingelöst",     unit: "Belohnungen" },
+];
+const achievementTypeInfo = (val) => ACHIEVEMENT_TYPES.find(t => t.value === val) || ACHIEVEMENT_TYPES[0];
 
 const RECURRING_OPTIONS = [
   { value: "daily",    label: "Täglich",    badge: "Täglich",    color: COLORS.sky },
@@ -75,7 +86,35 @@ const DEFAULT_DATA = {
     { id: uid(), emoji: "🍕", title: "Pizza-Abend wählen", cost: 30 },
     { id: uid(), emoji: "🎬", title: "Film aussuchen", cost: 15 },
   ],
+  achievements: [
+    { id: uid(), emoji: "🎯", title: "Erste Aufgabe",       description: "Deine allererste Aufgabe erledigt", type: "tasks_total",      target: 1,    starReward: 5,  enabled: true },
+    { id: uid(), emoji: "🏅", title: "Fleißige Biene",      description: "10 Aufgaben erledigt",              type: "tasks_total",      target: 10,   starReward: 10, enabled: true },
+    { id: uid(), emoji: "💪", title: "Aufgaben-Meister",    description: "50 Aufgaben geschafft",             type: "tasks_total",      target: 50,   starReward: 25, enabled: true },
+    { id: uid(), emoji: "🏆", title: "Aufgaben-Champion",   description: "100 Aufgaben erledigt",             type: "tasks_total",      target: 100,  starReward: 50, enabled: true },
+    { id: uid(), emoji: "⭐", title: "Erste 10 Sterne",     description: "10 Sterne insgesamt gesammelt",     type: "stars_total",      target: 10,   starReward: 5,  enabled: true },
+    { id: uid(), emoji: "🌟", title: "100-Sterne-Club",     description: "100 Sterne insgesamt gesammelt",    type: "stars_total",      target: 100,  starReward: 15, enabled: true },
+    { id: uid(), emoji: "💎", title: "500-Sterne-Schatz",   description: "500 Sterne insgesamt gesammelt",    type: "stars_total",      target: 500,  starReward: 30, enabled: true },
+    { id: uid(), emoji: "👑", title: "1000-Sterne-König",   description: "1000 Sterne insgesamt gesammelt",   type: "stars_total",      target: 1000, starReward: 50, enabled: true },
+    { id: uid(), emoji: "🔥", title: "3-Tage-Serie",        description: "3 Tage in Folge Aufgaben erledigt", type: "streak_days",      target: 3,    starReward: 10, enabled: true },
+    { id: uid(), emoji: "⚡", title: "7-Tage-Serie",        description: "1 Woche am Stück aktiv",            type: "streak_days",      target: 7,    starReward: 25, enabled: true },
+    { id: uid(), emoji: "🚀", title: "Produktiver Tag",     description: "5 Aufgaben an einem Tag geschafft", type: "tasks_day",        target: 5,    starReward: 10, enabled: true },
+    { id: uid(), emoji: "🎁", title: "Erste Belohnung",     description: "Deine erste Belohnung eingelöst",   type: "rewards_redeemed", target: 1,    starReward: 5,  enabled: true },
+    { id: uid(), emoji: "🛍️", title: "Shopping-Profi",      description: "10 Belohnungen eingelöst",          type: "rewards_redeemed", target: 10,   starReward: 20, enabled: true },
+  ],
+  unlockedAchievements: [],
+  rewardLog: [],
 };
+
+function ensureFields(data) {
+  if (!data) return data;
+  const patch = {};
+  if (!Array.isArray(data.achievements))         patch.achievements = DEFAULT_DATA.achievements;
+  if (!Array.isArray(data.unlockedAchievements)) patch.unlockedAchievements = [];
+  if (!Array.isArray(data.rewardLog))            patch.rewardLog = [];
+  if (!Array.isArray(data.starLog))              patch.starLog = [];
+  if (!Array.isArray(data.notifications))        patch.notifications = [];
+  return Object.keys(patch).length ? { ...data, ...patch } : data;
+}
 
 function loadDataLocal() {
   try {
@@ -103,6 +142,92 @@ function addNotification(data, type, child, text) {
     });
   }
   return { ...data, notifications: [note, ...(data.notifications || [])] };
+}
+
+function achievementProgress(data, childId, achievement) {
+  const completions = (data.completions || []).filter(c => c.childId === childId);
+  const child = (data.children || []).find(c => c.id === childId);
+  switch (achievement.type) {
+    case "tasks_total":
+      return completions.length;
+    case "stars_current":
+      return child ? child.stars : 0;
+    case "stars_total": {
+      const fromTasks = completions.reduce((sum, c) => {
+        const t = (data.tasks || []).find(t => t.id === c.taskId);
+        return sum + (t ? t.stars : 0);
+      }, 0);
+      const fromAdjust = (data.starLog || [])
+        .filter(e => e.childId === childId && e.delta > 0)
+        .reduce((s, e) => s + e.delta, 0);
+      const fromUnlocks = (data.unlockedAchievements || [])
+        .filter(u => u.childId === childId)
+        .reduce((s, u) => s + (u.starReward || 0), 0);
+      return fromTasks + fromAdjust + fromUnlocks;
+    }
+    case "streak_days": {
+      if (completions.length === 0) return 0;
+      const days = new Set(completions.map(c => new Date(c.date).toDateString()));
+      let streak = 0;
+      const cursor = new Date();
+      cursor.setHours(0, 0, 0, 0);
+      // if nothing today, start from yesterday (streak still valid until tomorrow morning)
+      if (!days.has(cursor.toDateString())) {
+        cursor.setDate(cursor.getDate() - 1);
+        if (!days.has(cursor.toDateString())) return 0;
+      }
+      while (days.has(cursor.toDateString())) {
+        streak++;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      return streak;
+    }
+    case "tasks_day": {
+      const counts = {};
+      completions.forEach(c => {
+        const k = new Date(c.date).toDateString();
+        counts[k] = (counts[k] || 0) + 1;
+      });
+      return Object.values(counts).reduce((m, n) => Math.max(m, n), 0);
+    }
+    case "rewards_redeemed":
+      return (data.rewardLog || []).filter(r => r.childId === childId).length;
+    default:
+      return 0;
+  }
+}
+
+// Checks all enabled achievements for a child, unlocks any newly-earned ones,
+// awards their star reward, and appends a notification per unlock.
+function checkAchievements(data, childId) {
+  const child = (data.children || []).find(c => c.id === childId);
+  if (!child) return data;
+  const achievements = data.achievements || [];
+  const unlocked = data.unlockedAchievements || [];
+  const alreadyIds = new Set(unlocked.filter(u => u.childId === childId).map(u => u.achievementId));
+
+  let updated = data;
+  for (const ach of achievements) {
+    if (!ach.enabled) continue;
+    if (alreadyIds.has(ach.id)) continue;
+    const progress = achievementProgress(updated, childId, ach);
+    if (progress >= ach.target) {
+      const bonus = Number(ach.starReward) || 0;
+      const entry = { id: uid(), achievementId: ach.id, childId, date: new Date().toISOString(), starReward: bonus };
+      const updChildren = updated.children.map(c =>
+        c.id === childId ? { ...c, stars: c.stars + bonus } : c
+      );
+      updated = {
+        ...updated,
+        children: updChildren,
+        unlockedAchievements: [entry, ...(updated.unlockedAchievements || [])],
+      };
+      const currentChild = updChildren.find(c => c.id === childId);
+      const bonusText = bonus > 0 ? ` (+${bonus}⭐)` : "";
+      updated = addNotification(updated, "achievement", currentChild, `🏆 Erfolg freigeschaltet: ${ach.emoji} „${ach.title}"${bonusText}`);
+    }
+  }
+  return updated;
 }
 
 async function requestPushPermission() {
@@ -285,7 +410,8 @@ function StarAdjustModal({ child, data, setData, onClose }) {
     const newStars = Math.max(0, child.stars + change);
     const logEntry = { id: uid(), childId: child.id, delta: change, comment: comment.trim(), date: new Date().toISOString() };
     const updChildren = data.children.map(c => c.id === child.id ? { ...c, stars: newStars } : c);
-    const updated = { ...data, children: updChildren, starLog: [logEntry, ...(data.starLog || [])] };
+    let updated = { ...data, children: updChildren, starLog: [logEntry, ...(data.starLog || [])] };
+    updated = checkAchievements(updated, child.id);
     setData(updated); saveData(updated); onClose();
   };
 
@@ -380,7 +506,7 @@ function StarAdjustModal({ child, data, setData, onClose }) {
   );
 }
 
-function ParentOverview({ data, setData, setView, setSelectedChild }) {
+function ParentOverview({ data, setData, setView, setSelectedChild, goToChildMode }) {
   const todayStr = new Date().toDateString();
   const dueTodayTasks = data.tasks.filter(isTaskDueToday);
   const [adjustChild, setAdjustChild] = useState(null);
@@ -399,8 +525,11 @@ function ParentOverview({ data, setData, setView, setSelectedChild }) {
         {new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })}
       </p>
       <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-        {data.children.map(child => (
-          <Card key={child.id} style={{ borderTop: `4px solid ${COLORS.mint}` }}>
+        {data.children.map((child, idx) => {
+          const accentColors = [COLORS.sky, COLORS.mint, COLORS.lavender, COLORS.rose, "#FF9F43"];
+          const accent = accentColors[idx % accentColors.length];
+          return (
+          <Card key={child.id} style={{ borderTop: `4px solid ${accent}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
               <div style={{ fontSize: 42 }}>{child.avatar}</div>
               <div style={{ flex: 1 }}>
@@ -420,11 +549,12 @@ function ParentOverview({ data, setData, setView, setSelectedChild }) {
               <div style={{ fontSize: 13, color: "#666" }}>⏳ {tasksPending(child.id)} offen</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <Btn small color={COLORS.sky} onClick={() => { setSelectedChild(child.id); setView("childMode"); }}>Kindansicht</Btn>
+              <Btn small color={COLORS.sky} onClick={() => goToChildMode(child.id)}>Kindansicht</Btn>
               <Btn small outline color={COLORS.lavender} onClick={() => { setSelectedChild(child.id); setView("childDetail"); }}>Details</Btn>
             </div>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {adjustChild && (
@@ -554,7 +684,9 @@ function ChildrenView({ data, setData }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", avatar: "🦊" });
   const [adjustChild, setAdjustChild] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // child object to delete
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [editChild, setEditChild] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", avatar: "🦊" });
 
   const addChild = () => {
     if (!form.name.trim()) return;
@@ -566,6 +698,15 @@ function ChildrenView({ data, setData }) {
     const updated = { ...data, children: data.children.filter(c => c.id !== id) };
     setData(updated); saveData(updated);
     setDeleteConfirm(null);
+  };
+  const openEdit = (child) => {
+    setEditChild(child);
+    setEditForm({ name: child.name, avatar: child.avatar });
+  };
+  const saveEdit = () => {
+    if (!editForm.name.trim()) return;
+    const updated = { ...data, children: data.children.map(c => c.id === editChild.id ? { ...c, name: editForm.name.trim(), avatar: editForm.avatar } : c) };
+    setData(updated); saveData(updated); setEditChild(null);
   };
 
   return (
@@ -583,6 +724,10 @@ function ChildrenView({ data, setData }) {
               <div style={{ marginTop: 4 }}><Badge color={COLORS.sun}>⭐ {child.stars} Sterne</Badge></div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => openEdit(child)}
+                style={{ background: COLORS.sky + "18", border: `1.5px solid ${COLORS.sky}44`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 15, color: COLORS.sky, fontWeight: 700 }}>
+                ✏️
+              </button>
               <button onClick={() => setAdjustChild(child)}
                 style={{ background: COLORS.sun + "33", border: `1.5px solid ${COLORS.sun}88`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 15, fontWeight: 700, color: "#b8860b" }}>
                 ⭐±
@@ -596,6 +741,32 @@ function ChildrenView({ data, setData }) {
 
       {adjustChild && (
         <StarAdjustModal child={adjustChild} data={data} setData={setData} onClose={() => setAdjustChild(null)} />
+      )}
+
+      {editChild && (
+        <Modal title={`${editChild.avatar} ${editChild.name} bearbeiten`} onClose={() => setEditChild(null)}>
+          <div style={{ display: "grid", gap: 16 }}>
+            <FormField label="Avatar">
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {AVATARS.map(a => (
+                  <button key={a} onClick={() => setEditForm({ ...editForm, avatar: a })}
+                    style={{ fontSize: 28, background: editForm.avatar === a ? COLORS.sky + "33" : "#f5f5f5", border: `2px solid ${editForm.avatar === a ? COLORS.sky : "transparent"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer" }}>
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </FormField>
+            <FormField label="Name">
+              <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="Name des Kindes" style={inputStyle}
+                onKeyDown={e => e.key === "Enter" && saveEdit()} />
+            </FormField>
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn color={COLORS.mint} onClick={saveEdit}>Speichern</Btn>
+              <Btn outline color={COLORS.rose} onClick={() => setEditChild(null)}>Abbrechen</Btn>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {deleteConfirm && (
@@ -646,6 +817,400 @@ function ChildrenView({ data, setData }) {
   );
 }
 
+function AchievementForm({ initial, onSave, onCancel }) {
+  const [form, setForm] = useState(initial);
+  const info = achievementTypeInfo(form.type);
+  const save = () => {
+    if (!form.title.trim()) return;
+    onSave({
+      ...form,
+      title: form.title.trim(),
+      description: (form.description || "").trim(),
+      target: Math.max(1, Number(form.target) || 1),
+      starReward: Math.max(0, Number(form.starReward) || 0),
+    });
+  };
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <FormField label="Emoji">
+        <EmojiPicker value={form.emoji} onChange={e => setForm({ ...form, emoji: e })} list={ACHIEVEMENT_EMOJIS} accentColor={COLORS.sun} />
+      </FormField>
+      <FormField label="Titel">
+        <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+          placeholder="z.B. Aufgaben-Meister" style={inputStyle} />
+      </FormField>
+      <FormField label="Beschreibung (optional)">
+        <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+          placeholder="Kurze Beschreibung" style={inputStyle} />
+      </FormField>
+      <FormField label="Bedingung">
+        <div style={{ display: "grid", gap: 8 }}>
+          {ACHIEVEMENT_TYPES.map(opt => (
+            <button key={opt.value} onClick={() => setForm({ ...form, type: opt.value })}
+              style={{
+                padding: "10px 12px", borderRadius: 12, cursor: "pointer", fontWeight: 700,
+                fontSize: 13, textAlign: "left",
+                background: form.type === opt.value ? COLORS.sky + "22" : "#f5f5f5",
+                border: `2px solid ${form.type === opt.value ? COLORS.sky : "transparent"}`,
+                color: form.type === opt.value ? COLORS.sky : "#555",
+              }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </FormField>
+      <FormField label={`Ziel (${info.unit})`}>
+        <input type="number" min={1} value={form.target}
+          onChange={e => setForm({ ...form, target: e.target.value })} style={inputStyle} />
+      </FormField>
+      <FormField label="⭐ Bonus-Sterne beim Freischalten">
+        <input type="number" min={0} value={form.starReward}
+          onChange={e => setForm({ ...form, starReward: e.target.value })} style={inputStyle} />
+      </FormField>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#555" }}>
+        <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })}
+          style={{ width: 16, height: 16 }} />
+        Erfolg aktiv
+      </label>
+      <div style={{ display: "flex", gap: 10 }}>
+        <Btn color={COLORS.mint} onClick={save}>Speichern</Btn>
+        <Btn outline color={COLORS.rose} onClick={onCancel}>Abbrechen</Btn>
+      </div>
+    </div>
+  );
+}
+
+function AchievementsView({ data, setData }) {
+  const BLANK = { emoji: "🏆", title: "", description: "", type: "tasks_total", target: 10, starReward: 10, enabled: true };
+  const [showAdd, setShowAdd] = useState(false);
+  const [editAch, setEditAch] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const list = data.achievements || [];
+  const unlocked = data.unlockedAchievements || [];
+
+  const addAchievement = (form) => {
+    const updated = { ...data, achievements: [...list, { ...form, id: uid() }] };
+    setData(updated); saveData(updated); setShowAdd(false);
+  };
+  const saveEdit = (form) => {
+    const updated = { ...data, achievements: list.map(a => a.id === editAch.id ? { ...form, id: a.id } : a) };
+    setData(updated); saveData(updated); setEditAch(null);
+  };
+  const deleteAchievement = (id) => {
+    const updated = {
+      ...data,
+      achievements: list.filter(a => a.id !== id),
+      unlockedAchievements: unlocked.filter(u => u.achievementId !== id),
+    };
+    setData(updated); saveData(updated);
+    setDeleteConfirm(null);
+  };
+  const toggleEnabled = (ach) => {
+    const updated = { ...data, achievements: list.map(a => a.id === ach.id ? { ...a, enabled: !a.enabled } : a) };
+    setData(updated); saveData(updated);
+  };
+
+  const unlockedCount = (achId) => unlocked.filter(u => u.achievementId === achId).length;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+        <h2 style={{ margin: 0 }}>🏆 Erfolge</h2>
+        <Btn color={COLORS.sun} onClick={() => setShowAdd(true)}>+ Neuer Erfolg</Btn>
+      </div>
+      <p style={{ color: "#888", marginTop: -10, marginBottom: 20, fontSize: 14 }}>
+        Erfolge werden automatisch freigeschaltet, wenn Kinder ein Ziel erreichen. Sie erhalten dann die Bonus-Sterne.
+      </p>
+      <div style={{ display: "grid", gap: 12 }}>
+        {list.map(ach => {
+          const info = achievementTypeInfo(ach.type);
+          const count = unlockedCount(ach.id);
+          return (
+            <Card key={ach.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", opacity: ach.enabled ? 1 : 0.55 }}>
+              <span style={{ fontSize: 32 }}>{ach.emoji}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{ach.title}</div>
+                {ach.description && <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>{ach.description}</div>}
+                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                  <Badge color={COLORS.sky}>{info.label}: {ach.target} {info.unit}</Badge>
+                  <Badge color={COLORS.sun}>+{ach.starReward}⭐</Badge>
+                  {count > 0 && <Badge color={COLORS.mint}>{count}× freigeschaltet</Badge>}
+                  {!ach.enabled && <Badge color={COLORS.rose}>inaktiv</Badge>}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button onClick={() => toggleEnabled(ach)}
+                  title={ach.enabled ? "Deaktivieren" : "Aktivieren"}
+                  style={{ background: (ach.enabled ? COLORS.mint : "#aaa") + "18", border: `1.5px solid ${(ach.enabled ? COLORS.mint : "#aaa")}44`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 15, color: ach.enabled ? COLORS.mint : "#888", fontWeight: 700 }}>
+                  {ach.enabled ? "✓" : "○"}
+                </button>
+                <EditDeleteBtns onEdit={() => setEditAch(ach)} onDelete={() => setDeleteConfirm(ach)} />
+              </div>
+            </Card>
+          );
+        })}
+        {list.length === 0 && (
+          <Card style={{ textAlign: "center", padding: 30, color: "#aaa" }}>
+            Noch keine Erfolge konfiguriert.
+          </Card>
+        )}
+      </div>
+
+      {showAdd && (
+        <Modal title="Neuer Erfolg" onClose={() => setShowAdd(false)}>
+          <AchievementForm initial={BLANK} onSave={addAchievement} onCancel={() => setShowAdd(false)} />
+        </Modal>
+      )}
+      {editAch && (
+        <Modal title="Erfolg bearbeiten" onClose={() => setEditAch(null)}>
+          <AchievementForm
+            initial={{ emoji: editAch.emoji, title: editAch.title, description: editAch.description || "", type: editAch.type, target: editAch.target, starReward: editAch.starReward, enabled: editAch.enabled }}
+            onSave={saveEdit} onCancel={() => setEditAch(null)} />
+        </Modal>
+      )}
+
+      {deleteConfirm && (
+        <Modal title="Erfolg wirklich löschen?" onClose={() => setDeleteConfirm(null)}>
+          <div style={{ display: "grid", gap: 20 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 56, marginBottom: 12 }}>{deleteConfirm.emoji}</div>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{deleteConfirm.title}</div>
+              <div style={{ background: COLORS.rose + "18", border: `1.5px solid ${COLORS.rose}55`, borderRadius: 12, padding: "12px 16px", color: COLORS.rose, fontWeight: 600, fontSize: 14, lineHeight: 1.5 }}>
+                ⚠️ Dieser Erfolg wird für alle Kinder gelöscht. Bereits freigeschaltete Einträge gehen verloren.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn onClick={() => setDeleteConfirm(null)}>Abbrechen</Btn>
+              <Btn color={COLORS.rose} onClick={() => deleteAchievement(deleteConfirm.id)}>
+                Ja, endgültig löschen
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function ConfettiBurst() {
+  const rand = (min, max) => Math.random() * (max - min) + min;
+  const pieces = Array.from({ length: 40 }, (_, i) => {
+    const angle = rand(-Math.PI * 0.9, -Math.PI * 0.1); // upward spread
+    const dist = rand(180, 420);
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist + rand(80, 260); // then fall
+    const rot = rand(-720, 720);
+    const dur = rand(1.6, 2.6);
+    const emoji = ["🎉","🎊","✨","⭐","🌟"][i % 5];
+    return { i, dx, dy, rot, dur, emoji, delay: rand(0, 0.35), left: rand(20, 80) };
+  });
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 350, pointerEvents: "none", overflow: "hidden",
+    }}>
+      {pieces.map(p => (
+        <span key={p.i}
+          style={{
+            position: "absolute", top: "45%", left: `${p.left}%`,
+            fontSize: 24,
+            "--dx": `${p.dx}px`, "--dy": `${p.dy}px`, "--rot": `${p.rot}deg`,
+            animation: `achConfetti ${p.dur}s ${p.delay}s ease-out forwards`,
+          }}>
+          {p.emoji}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function AchievementUnlockOverlay({ achievement, onClose }) {
+  const rand = (min, max) => Math.random() * (max - min) + min;
+  const confetti = Array.from({ length: 24 }, (_, i) => {
+    const angle = (i / 24) * Math.PI * 2;
+    const dist = rand(160, 320);
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+    const rot = rand(-540, 540);
+    const dur = rand(1.1, 1.9);
+    const emoji = ["🎉","🎊","⭐","✨","🌟","💫"][i % 6];
+    return { i, dx, dy, rot, dur, emoji, delay: rand(0, 0.25) };
+  });
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 400,
+      background: "radial-gradient(circle at center, rgba(26,26,46,0.85) 0%, rgba(26,26,46,0.96) 70%)",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      padding: 24, animation: "achOverlayIn .35s ease",
+    }}>
+      {/* rotating rays */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%",
+        width: 640, height: 640, pointerEvents: "none",
+        background: `conic-gradient(from 0deg,
+          ${COLORS.sun}00 0deg, ${COLORS.sun}55 20deg, ${COLORS.sun}00 40deg,
+          ${COLORS.sun}00 90deg, ${COLORS.sun}55 110deg, ${COLORS.sun}00 130deg,
+          ${COLORS.sun}00 180deg, ${COLORS.sun}55 200deg, ${COLORS.sun}00 220deg,
+          ${COLORS.sun}00 270deg, ${COLORS.sun}55 290deg, ${COLORS.sun}00 310deg)`,
+        borderRadius: "50%",
+        transform: "translate(-50%, -50%)",
+        animation: "achRayRotate 12s linear infinite",
+        maskImage: "radial-gradient(circle, transparent 20%, black 55%, transparent 90%)",
+        WebkitMaskImage: "radial-gradient(circle, transparent 20%, black 55%, transparent 90%)",
+      }} />
+
+      {/* confetti */}
+      {confetti.map(c => (
+        <span key={c.i}
+          style={{
+            position: "absolute", top: "50%", left: "50%",
+            fontSize: 22, pointerEvents: "none",
+            "--dx": `${c.dx}px`, "--dy": `${c.dy}px`, "--rot": `${c.rot}deg`,
+            animation: `achConfetti ${c.dur}s ${c.delay}s ease-out forwards`,
+          }}>
+          {c.emoji}
+        </span>
+      ))}
+
+      {/* trophy */}
+      <div style={{
+        position: "relative", zIndex: 1,
+        animation: "achTrophyIn .9s cubic-bezier(.34,1.56,.64,1) forwards",
+      }}>
+        <div style={{
+          fontSize: "clamp(120px, 30vw, 200px)",
+          filter: `drop-shadow(0 0 24px ${COLORS.sun}cc) drop-shadow(0 0 60px ${COLORS.sun}88)`,
+          animation: "achTrophyFloat 3s ease-in-out infinite 1s",
+          lineHeight: 1,
+        }}>
+          {achievement.emoji || "🏆"}
+        </div>
+      </div>
+
+      {/* text */}
+      <div style={{
+        position: "relative", zIndex: 1,
+        textAlign: "center", marginTop: 20, maxWidth: 480,
+        animation: "achTextIn .5s ease .6s both",
+      }}>
+        <div style={{
+          color: COLORS.sun, fontWeight: 900, fontSize: 16,
+          letterSpacing: 3, textTransform: "uppercase",
+          textShadow: `0 0 20px ${COLORS.sun}aa`,
+        }}>
+          🎉 Erfolg freigeschaltet!
+        </div>
+        <div style={{
+          color: "white", fontWeight: 900, fontSize: "clamp(24px, 5vw, 34px)",
+          marginTop: 10, lineHeight: 1.2,
+        }}>
+          {achievement.title}
+        </div>
+        {achievement.description && (
+          <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 15, marginTop: 8 }}>
+            {achievement.description}
+          </div>
+        )}
+        {achievement.starReward > 0 && (
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            background: COLORS.sun + "33", border: `2px solid ${COLORS.sun}`,
+            borderRadius: 999, padding: "10px 22px", marginTop: 18,
+            color: COLORS.sun, fontWeight: 900, fontSize: 22,
+          }}>
+            <span>⭐</span>
+            <span>+{achievement.starReward} Bonus-Sterne</span>
+          </div>
+        )}
+      </div>
+
+      <button onClick={onClose}
+        style={{
+          position: "relative", zIndex: 1, marginTop: 32,
+          background: "white", color: COLORS.dark,
+          border: "none", borderRadius: 16,
+          padding: "14px 32px", fontSize: 17, fontWeight: 800,
+          cursor: "pointer",
+          boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+          animation: "achTextIn .5s ease 1s both",
+        }}>
+        Weiter 🎉
+      </button>
+    </div>
+  );
+}
+
+function AchievementsPanel({ data, childId, compact }) {
+  const achievements = (data.achievements || []).filter(a => a.enabled);
+  const unlocked = (data.unlockedAchievements || []).filter(u => u.childId === childId);
+  const unlockedIds = new Set(unlocked.map(u => u.achievementId));
+
+  const items = achievements.map(a => {
+    const progress = achievementProgress(data, childId, a);
+    const done = unlockedIds.has(a.id);
+    const pct = Math.min(100, Math.round((progress / a.target) * 100));
+    return { ach: a, progress, done, pct };
+  });
+  items.sort((a, b) => {
+    if (a.done !== b.done) return a.done ? -1 : 1;
+    return b.pct - a.pct;
+  });
+
+  if (achievements.length === 0) {
+    return <Card style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Noch keine Erfolge verfügbar.</Card>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {items.map(({ ach, progress, done, pct }) => (
+        <div key={ach.id}
+          style={{
+            background: done ? COLORS.sun + "1a" : "white",
+            borderRadius: 16, padding: compact ? "10px 14px" : "14px 18px",
+            display: "flex", gap: 12, alignItems: "center",
+            border: `2px solid ${done ? COLORS.sun : "#eee"}`,
+            boxShadow: done ? `0 0 0 0 ${COLORS.sun}` : "0 2px 8px #0001",
+          }}>
+          <div style={{
+            fontSize: compact ? 26 : 30,
+            filter: done ? "none" : "grayscale(0.7) opacity(0.5)",
+            transition: "filter .3s",
+            flexShrink: 0,
+          }}>{ach.emoji}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700, fontSize: compact ? 14 : 15, color: COLORS.dark }}>{ach.title}</span>
+              {done && <span style={{ fontSize: 13 }}>🎉</span>}
+            </div>
+            {ach.description && !compact && (
+              <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{ach.description}</div>
+            )}
+            <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ flex: 1, background: "#f0f0f0", borderRadius: 8, height: 8, overflow: "hidden" }}>
+                <div style={{
+                  background: done ? COLORS.sun : `linear-gradient(90deg, ${COLORS.sky}, ${COLORS.mint})`,
+                  height: "100%", width: `${pct}%`, borderRadius: 8, transition: "width .5s",
+                }} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: done ? "#b8860b" : "#888", minWidth: 55, textAlign: "right" }}>
+                {Math.min(progress, ach.target)}/{ach.target}
+              </span>
+            </div>
+          </div>
+          {ach.starReward > 0 && (
+            <div style={{
+              fontSize: 12, fontWeight: 800, color: done ? "#b8860b" : "#bbb",
+              background: done ? COLORS.sun + "33" : "#f5f5f5",
+              padding: "4px 8px", borderRadius: 8, whiteSpace: "nowrap",
+            }}>+{ach.starReward}⭐</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChildDetail({ data, setData, childId, setView }) {
   const child = data.children.find(c => c.id === childId);
   const todayStr = new Date().toDateString();
@@ -656,7 +1221,9 @@ function ChildDetail({ data, setData, childId, setView }) {
   const redeemReward = (reward) => {
     if (child.stars < reward.cost) return;
     const updChildren = data.children.map(c => c.id === childId ? { ...c, stars: c.stars - reward.cost } : c);
-    const updated = { ...data, children: updChildren };
+    const logEntry = { id: uid(), rewardId: reward.id, childId, cost: reward.cost, date: new Date().toISOString() };
+    let updated = { ...data, children: updChildren, rewardLog: [logEntry, ...(data.rewardLog || [])] };
+    updated = checkAchievements(updated, childId);
     setData(updated); saveData(updated);
   };
 
@@ -686,6 +1253,11 @@ function ChildDetail({ data, setData, childId, setView }) {
           );
         })}
       </div>
+      <h3>🏆 Erfolge</h3>
+      <div style={{ marginBottom: 24 }}>
+        <AchievementsPanel data={data} childId={childId} />
+      </div>
+
       <h3>Belohnungen einlösen</h3>
       <div style={{ display: "grid", gap: 10 }}>
         {data.rewards.map(reward => (
@@ -812,6 +1384,28 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
     .map(c => c.taskId);
   const [celebrating, setCelebrating] = useState(null);
   const [showPinDialog, setShowPinDialog] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(false);
+  const [unlockQueue, setUnlockQueue] = useState([]);
+  const [dayCompleteBurst, setDayCompleteBurst] = useState(0);
+
+  const queueNewUnlocks = (before, after) => {
+    const prevIds = new Set(
+      (before.unlockedAchievements || [])
+        .filter(u => u.childId === childId)
+        .map(u => u.achievementId)
+    );
+    const newly = (after.unlockedAchievements || [])
+      .filter(u => u.childId === childId && !prevIds.has(u.achievementId));
+    if (newly.length === 0) return;
+    const achMap = new Map((after.achievements || []).map(a => [a.id, a]));
+    const overlays = newly
+      .map(u => {
+        const a = achMap.get(u.achievementId);
+        return a ? { ...a, starReward: u.starReward ?? a.starReward } : null;
+      })
+      .filter(Boolean);
+    if (overlays.length) setUnlockQueue(q => [...q, ...overlays]);
+  };
   const isTablet = useIsTablet();
 
   const dueTasks = data.tasks.filter(task => {
@@ -831,6 +1425,17 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
     const updChildren = data.children.map(c => c.id === childId ? { ...c, stars: c.stars + task.stars } : c);
     let updated = { ...data, completions: [...data.completions, completion], children: updChildren };
     updated = addNotification(updated, "task", child, `${task.emoji} „${task.title}" erledigt (+${task.stars}⭐)`);
+    updated = checkAchievements(updated, childId);
+    queueNewUnlocks(data, updated);
+
+    // Detect: was this the completion that finished all daily tasks?
+    const wasDoneBefore = allDueToday.filter(isDone).length;
+    const willBeDone = wasDoneBefore + 1;
+    if (allDueToday.length > 0 && willBeDone === allDueToday.length) {
+      setDayCompleteBurst(n => n + 1);
+      setTimeout(() => setDayCompleteBurst(n => Math.max(0, n - 1)), 3200);
+    }
+
     setData(updated); saveData(updated);
     setCelebrating(task.id);
     setTimeout(() => setCelebrating(null), 1500);
@@ -839,8 +1444,11 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
   const redeemReward = (reward) => {
     if (child.stars < reward.cost) return;
     const updChildren = data.children.map(c => c.id === childId ? { ...c, stars: c.stars - reward.cost } : c);
-    let updated = { ...data, children: updChildren };
+    const logEntry = { id: uid(), rewardId: reward.id, childId, cost: reward.cost, date: new Date().toISOString() };
+    let updated = { ...data, children: updChildren, rewardLog: [logEntry, ...(data.rewardLog || [])] };
     updated = addNotification(updated, "reward", child, `${reward.emoji} „${reward.title}" eingelöst (-${reward.cost}⭐)`);
+    updated = checkAchievements(updated, childId);
+    queueNewUnlocks(data, updated);
     setData(updated); saveData(updated);
   };
 
@@ -867,8 +1475,8 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
                 cursor: done ? "default" : "pointer",
                 border: `2px solid ${done ? COLORS.mint : "#eee"}`,
                 boxShadow: done ? "none" : "0 4px 16px #0001",
-                transform: isCelebrating ? "scale(1.04)" : "scale(1)",
-                transition: "all .3s",
+                animation: isCelebrating ? "taskBounce 0.5s ease" : "none",
+                transition: "background .3s, border-color .3s, box-shadow .3s",
               }}>
               <div style={{ width: 48, height: 48, borderRadius: 14, background: done ? COLORS.mint : COLORS.sky + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>
                 {done ? "✅" : task.emoji}
@@ -926,6 +1534,10 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
     </>
   );
 
+  const enabledAchievements = (data.achievements || []).filter(a => a.enabled);
+  const unlockedAchCount = (data.unlockedAchievements || []).filter(u => u.childId === childId).length;
+  const totalAchCount = enabledAchievements.length;
+
   const header = (
     <div style={{ background: `linear-gradient(135deg, ${COLORS.sky}, ${COLORS.mint})`, padding: "24px 20px 30px", borderRadius: isTablet ? "0 0 30px 30px" : "0 0 30px 30px" }}>
       <div style={{ maxWidth: isTablet ? 1100 : undefined, margin: isTablet ? "0 auto" : undefined }}>
@@ -962,12 +1574,31 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
               })}
             </div>
           )}
-          <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 16, padding: "12px 20px", display: "inline-flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 28 }}>⭐</span>
-            <div>
-              <div style={{ color: "white", fontSize: 26, fontWeight: 900, lineHeight: 1 }}>{child.stars}</div>
-              <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>Sterne gesammelt</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 16, padding: "12px 20px", display: "inline-flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 32, animation: "starGlow 2s ease-in-out infinite", display: "inline-block" }}>⭐</span>
+              <div>
+                <div style={{ color: "white", fontSize: 30, fontWeight: 900, lineHeight: 1 }}>{child.stars}</div>
+                <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>Sterne gesammelt</div>
+              </div>
             </div>
+            {totalAchCount > 0 && (
+              <button onClick={() => setShowAchievements(true)}
+                style={{
+                  background: "rgba(255,255,255,0.25)", border: "none",
+                  borderRadius: 16, padding: "12px 20px",
+                  display: "inline-flex", alignItems: "center", gap: 10,
+                  cursor: "pointer", color: "white",
+                }}>
+                <span style={{ fontSize: 32 }}>🏆</span>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ color: "white", fontSize: 30, fontWeight: 900, lineHeight: 1 }}>
+                    {unlockedAchCount}<span style={{ fontSize: 18, opacity: 0.75 }}>/{totalAchCount}</span>
+                  </div>
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>Erfolge</div>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -981,7 +1612,7 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
         <span style={{ fontWeight: 700, color: COLORS.mint }}>{doneTasks}/{totalTasks}</span>
       </div>
       <div style={{ background: "#f0f0f0", borderRadius: 10, height: 14, overflow: "hidden" }}>
-        <div style={{ background: `linear-gradient(90deg, ${COLORS.mint}, ${COLORS.sky})`, height: "100%", width: `${progress}%`, borderRadius: 10, transition: "width .5s" }} />
+        <div style={{ background: `linear-gradient(90deg, ${COLORS.mint}, ${COLORS.sky}, ${COLORS.mint})`, backgroundSize: "200% 100%", animation: "shimmer 2s linear infinite", height: "100%", width: `${progress}%`, borderRadius: 10, transition: "width .5s" }} />
       </div>
       {progress === 100 && totalTasks > 0 && (
         <div style={{ textAlign: "center", marginTop: 12, fontSize: 22 }}>🎉 Alle Aufgaben erledigt! Super gemacht!</div>
@@ -1018,6 +1649,21 @@ function ChildMode({ data, setData, childId, setSelectedChild, setView }) {
           {shopList}
         </div>
       )}
+
+      {showAchievements && (
+        <Modal title={`🏆 Meine Erfolge (${unlockedAchCount}/${totalAchCount})`} onClose={() => setShowAchievements(false)}>
+          <AchievementsPanel data={data} childId={childId} />
+        </Modal>
+      )}
+
+      {unlockQueue.length > 0 && (
+        <AchievementUnlockOverlay
+          achievement={unlockQueue[0]}
+          onClose={() => setUnlockQueue(q => q.slice(1))}
+        />
+      )}
+
+      {dayCompleteBurst > 0 && <ConfettiBurst key={dayCompleteBurst} />}
     </div>
   );
 }
@@ -1051,7 +1697,7 @@ function SettingsView({ data, setData, familyId }) {
 
   return (
     <div>
-      <h2 style={{ margin: "0 0 20px" }}>⚙️ Einstellungen</h2>
+      <h2 style={{ margin: "0 0 20px" }}>Einstellungen</h2>
       <Card>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 36 }}>🔒</div>
@@ -1183,7 +1829,7 @@ function NotificationsView({ data, setData }) {
                 border: `2px solid ${note.read ? "#f0f0f0" : COLORS.sky + "44"}`,
               }}>
                 <div style={{ fontSize: 28, lineHeight: 1 }}>
-                  {note.type === "task" ? "✅" : "🎁"}
+                  {note.type === "task" ? "✅" : note.type === "achievement" ? "🏆" : "🎁"}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: note.read ? 500 : 700, fontSize: 15, color: COLORS.dark }}>
@@ -1205,19 +1851,34 @@ function NotificationsView({ data, setData }) {
 }
 
 export default function App() {
-  const [data, setData] = useState(() => loadDataLocal() ?? DEFAULT_DATA);
+  const [data, setData] = useState(() => ensureFields(loadDataLocal() ?? DEFAULT_DATA));
   const [loading, setLoading] = useState(true);
   const [familyId] = useState(() => getFamilyId());
   const [view, setView] = useState("overview");
   const [selectedChild, setSelectedChild] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showChildPicker, setShowChildPicker] = useState(false);
+  const [noPinWarning, setNoPinWarning] = useState(null); // { childId }
+  const [noPinWarningSuppressed] = useState(() => localStorage.getItem("noPinWarningSuppressed") === "true");
+  const [noPinWarningCheck, setNoPinWarningCheck] = useState(false);
+
+  const goToChildMode = (childId) => {
+    if (!data.pin && !noPinWarningSuppressed) {
+      setNoPinWarning({ childId });
+      setNoPinWarningCheck(false);
+    } else {
+      setSelectedChild(childId);
+      setView("childMode");
+    }
+  };
 
   // On mount: load from Firestore and override local data if found
   useEffect(() => {
     loadFromFirestore().then(remote => {
       if (remote) {
-        setData(remote);
-        saveDataLocal(remote);
+        const patched = ensureFields(remote);
+        setData(patched);
+        saveDataLocal(patched);
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -1235,20 +1896,21 @@ export default function App() {
     { id: "overview", label: "🏠 Start",     icon: "🏠" },
     { id: "tasks",    label: "📋 Aufgaben",  icon: "📋" },
     { id: "rewards",  label: "🎁 Shop",      icon: "🎁" },
+    { id: "achievements", label: "🏆 Erfolge", icon: "🏆" },
     { id: "children", label: "👤 Kinder",    icon: "👤" },
     { id: "settings", label: "⚙️ Einst.",    icon: "⚙️" },
   ];
 
   if (loading) return (
-    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", minHeight: "100vh", background: COLORS.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-      <div style={{ fontSize: 52 }}>🏡</div>
+    <div style={{ fontFamily: "'Nunito', sans-serif", minHeight: "100vh", background: COLORS.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+      <div style={{ fontSize: 52, animation: "softPulse 1.6s ease-in-out infinite" }}>🏡</div>
       <div style={{ fontWeight: 800, fontSize: 20, color: COLORS.dark }}>Haushalts-Helden</div>
       <div style={{ color: "#888", fontSize: 14 }}>Daten werden geladen…</div>
     </div>
   );
 
   if (view === "childMode" && selectedChild) return (
-    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div style={{ fontFamily: "'Nunito', sans-serif" }}>
       <ChildMode data={data} setData={setData} childId={selectedChild} setSelectedChild={setSelectedChild} setView={setView} />
     </div>
   );
@@ -1257,6 +1919,7 @@ export default function App() {
     overview: { label: "Elternbereich", icon: "🔑", sub: "Deine Familien-Übersicht" },
     tasks:    { label: "Aufgaben",       icon: "📋", sub: "Aufgaben verwalten" },
     rewards:  { label: "Belohnungen",    icon: "🎁", sub: "Shop & Prämien" },
+    achievements: { label: "Erfolge",    icon: "🏆", sub: "Achievements verwalten" },
     children: { label: "Kinder",         icon: "👤", sub: "Profile verwalten" },
     settings: { label: "Einstellungen",  icon: "⚙️", sub: "App konfigurieren" },
   };
@@ -1279,20 +1942,103 @@ export default function App() {
         <div style={{ color: "white", fontWeight: 800, fontSize: 20, lineHeight: 1.2 }}>{currentTitle.label}</div>
         <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, marginTop: 3 }}>{currentTitle.sub}</div>
       </div>
-      {data.pin && (
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: COLORS.mint + "22", border: `1px solid ${COLORS.mint}44`, borderRadius: 20, padding: "6px 12px" }}>
-          <span style={{ fontSize: 13 }}>🔒</span>
-          <span style={{ color: COLORS.mint, fontSize: 12, fontWeight: 700 }}>Gesichert</span>
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+        {data.children.length > 0 && (
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => data.children.length === 1
+                ? goToChildMode(data.children[0].id)
+                : setShowChildPicker(p => !p)}
+              style={{
+                background: "rgba(255,255,255,0.13)", border: "1.5px solid rgba(255,255,255,0.28)",
+                borderRadius: 12, padding: "7px 14px", color: "white",
+                fontSize: 13, fontWeight: 700, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+              }}>
+              {data.children.length === 1
+                ? <>{data.children[0].avatar} Kindansicht</>
+                : <>👦 Kindansicht {showChildPicker ? "▲" : "▼"}</>}
+            </button>
+            {showChildPicker && data.children.length > 1 && (
+              <div style={{
+                position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 300,
+                background: "white", borderRadius: 14, padding: 8,
+                boxShadow: "0 8px 28px rgba(0,0,0,0.15)", minWidth: 190,
+                border: "1px solid #eee",
+              }}>
+                <div style={{ fontSize: 11, color: "#bbb", fontWeight: 700, padding: "4px 14px 8px", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                  Kind auswählen
+                </div>
+                {data.children.map(child => (
+                  <button key={child.id}
+                    onClick={() => { goToChildMode(child.id); setShowChildPicker(false); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, width: "100%",
+                      background: "none", border: "none", padding: "10px 14px",
+                      cursor: "pointer", fontSize: 15, fontWeight: 700,
+                      color: COLORS.dark, borderRadius: 10, textAlign: "left",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f5f5f5"}
+                    onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                    <span style={{ fontSize: 22 }}>{child.avatar}</span>
+                    {child.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {data.pin && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, background: COLORS.mint + "22", border: `1px solid ${COLORS.mint}44`, borderRadius: 20, padding: "6px 12px" }}>
+            <span style={{ fontSize: 13 }}>🔒</span>
+            <span style={{ color: COLORS.mint, fontSize: 12, fontWeight: 700 }}>Gesichert</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const noPinWarningModal = noPinWarning && (
+    <div style={{ position: "fixed", inset: 0, background: "#0006", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <Card style={{ width: "100%", maxWidth: 420 }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🔓</div>
+          <h3 style={{ margin: "0 0 10px", fontSize: 18, color: COLORS.dark }}>Kein PIN gesetzt</h3>
+          <p style={{ margin: 0, color: "#666", fontSize: 14, lineHeight: 1.6 }}>
+            Der Elternbereich ist nicht durch einen PIN geschützt. Kinder können jederzeit ohne Einschränkung zurück in den Elternbereich wechseln.
+          </p>
         </div>
-      )}
+        <div style={{ background: COLORS.sun + "18", border: `1.5px solid ${COLORS.sun}55`, borderRadius: 12, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#7a6000", lineHeight: 1.5 }}>
+          💡 Tipp: Lege einen PIN fest, damit nur Eltern zurückwechseln können.{" "}
+          <button onClick={() => { setNoPinWarning(null); setView("settings"); }}
+            style={{ background: "none", border: "none", color: COLORS.sky, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+            Jetzt zu den Einstellungen →
+          </button>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, cursor: "pointer", fontSize: 13, color: "#555" }}>
+          <input type="checkbox" checked={noPinWarningCheck} onChange={e => setNoPinWarningCheck(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: "pointer" }} />
+          Diese Warnung nicht mehr anzeigen
+        </label>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn outline color="#aaa" onClick={() => setNoPinWarning(null)}>Abbrechen</Btn>
+          <Btn color={COLORS.sky} onClick={() => {
+            if (noPinWarningCheck) localStorage.setItem("noPinWarningSuppressed", "true");
+            setSelectedChild(noPinWarning.childId);
+            setView("childMode");
+            setNoPinWarning(null);
+          }}>Trotzdem wechseln</Btn>
+        </div>
+      </Card>
     </div>
   );
 
   const content = (
     <>
-      {view === "overview"    && <ParentOverview data={data} setData={setData} setView={setView} setSelectedChild={setSelectedChild} />}
+      {view === "overview"    && <ParentOverview data={data} setData={setData} setView={setView} setSelectedChild={setSelectedChild} goToChildMode={goToChildMode} />}
       {view === "tasks"       && <TasksView data={data} setData={setData} />}
       {view === "rewards"     && <RewardsView data={data} setData={setData} />}
+      {view === "achievements"&& <AchievementsView data={data} setData={setData} />}
       {view === "children"    && <ChildrenView data={data} setData={setData} />}
       {view === "settings"    && <SettingsView data={data} setData={setData} familyId={familyId} />}
       {view === "childDetail" && selectedChild && <ChildDetail data={data} setData={setData} childId={selectedChild} setView={setView} />}
@@ -1314,7 +2060,7 @@ export default function App() {
   if (isTablet) {
     // ── Tablet layout: fixed sidebar + main ────────────────────────────────
     return (
-      <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", minHeight: "100vh", background: COLORS.cream }}>
+      <div style={{ fontFamily: "'Nunito', sans-serif", display: "flex", minHeight: "100vh", background: COLORS.cream }}>
         {/* Sidebar */}
         <div style={{ width: 220, background: COLORS.dark, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
           <div style={{ padding: "22px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
@@ -1339,7 +2085,7 @@ export default function App() {
                   cursor: "pointer", textAlign: "left", transition: "all .15s",
                 }}>
                 <span style={{ fontSize: 18 }}>{n.icon}</span>
-                {n.label.replace(/^.\s/, "")}
+                {n.label.replace(/^.\s/u, "")}
               </button>
             ))}
           </nav>
@@ -1368,22 +2114,74 @@ export default function App() {
         </div>
 
         {notifPanel}
-        <style>{`@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
+        {noPinWarningModal}
+        {showChildPicker && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 199 }} onClick={() => setShowChildPicker(false)} />
+        )}
       </div>
     );
   }
 
   // ── Mobile layout: top header + bottom tabs ────────────────────────────────
   return (
-    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", maxWidth: 720, margin: "0 auto", minHeight: "100vh", background: COLORS.cream }}>
+    <div style={{ fontFamily: "'Nunito', sans-serif", maxWidth: 720, margin: "0 auto", minHeight: "100vh", background: COLORS.cream }}>
       <div style={{ background: COLORS.dark, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
         <span style={{ fontSize: 24 }}>🏡</span>
         <span style={{ color: "white", fontWeight: 800, fontSize: 18 }}>Haushalts-Helden</span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {data.pin && <span style={{ color: COLORS.mint, fontSize: 12 }}>🔒</span>}
+          {data.children.length > 0 && (
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => data.children.length === 1
+                  ? goToChildMode(data.children[0].id)
+                  : setShowChildPicker(p => !p)}
+                style={{
+                  background: "rgba(255,255,255,0.13)", border: "1.5px solid rgba(255,255,255,0.28)",
+                  borderRadius: 10, padding: "6px 12px", color: "white",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
+                }}>
+                {data.children.length === 1
+                  ? <>{data.children[0].avatar} Kindansicht</>
+                  : <>👦 Kindansicht {showChildPicker ? "▲" : "▼"}</>}
+              </button>
+              {showChildPicker && data.children.length > 1 && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 300,
+                  background: "white", borderRadius: 14, padding: 8,
+                  boxShadow: "0 8px 28px rgba(0,0,0,0.15)", minWidth: 190,
+                  border: "1px solid #eee",
+                }}>
+                  <div style={{ fontSize: 11, color: "#bbb", fontWeight: 700, padding: "4px 14px 8px", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                    Kind auswählen
+                  </div>
+                  {data.children.map(child => (
+                    <button key={child.id}
+                      onClick={() => { goToChildMode(child.id); setShowChildPicker(false); }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10, width: "100%",
+                        background: "none", border: "none", padding: "10px 14px",
+                        cursor: "pointer", fontSize: 15, fontWeight: 700,
+                        color: COLORS.dark, borderRadius: 10, textAlign: "left",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#f5f5f5"}
+                      onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                      <span style={{ fontSize: 22 }}>{child.avatar}</span>
+                      {child.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <NotificationBell data={data} setData={setData} onClick={openNotifications} />
         </div>
       </div>
+
+      {showChildPicker && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 199 }} onClick={() => setShowChildPicker(false)} />
+      )}
 
       {notifPanel}
 
@@ -1393,17 +2191,21 @@ export default function App() {
         {NAV.map(n => (
           <button key={n.id} onClick={() => setView(n.id)}
             style={{
-              flex: 1, background: "none", border: "none",
+              flex: 1, background: view === n.id ? COLORS.sky + "10" : "none", border: "none",
               borderBottom: view === n.id ? `3px solid ${COLORS.sky}` : "3px solid transparent",
-              padding: "14px 4px", fontSize: 13, fontWeight: view === n.id ? 700 : 500,
-              color: view === n.id ? COLORS.sky : "#888", cursor: "pointer", transition: "all .2s",
+              padding: "10px 4px 10px", cursor: "pointer", transition: "all .2s",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
             }}>
-            {n.label}
+            <span style={{ fontSize: 18, lineHeight: 1 }}>{n.icon}</span>
+            <span style={{ fontSize: 11, fontWeight: view === n.id ? 700 : 500, color: view === n.id ? COLORS.sky : "#999" }}>
+              {n.label.replace(/^.\s/u, "")}
+            </span>
           </button>
         ))}
       </div>
 
       <div style={{ padding: 24 }}>{content}</div>
+      {noPinWarningModal}
       <style>{`@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
     </div>
   );
