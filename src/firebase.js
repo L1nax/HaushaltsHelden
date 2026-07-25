@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_kwBN3qnuep2jUNrGAhLgU02hAP-MGdc",
@@ -34,4 +34,15 @@ export async function loadFromFirestore() {
 export async function saveToFirestore(data) {
   const id = getFamilyId();
   await setDoc(doc(db, "families", id), data);
+}
+
+// Subscribes to live updates from Firestore. Skips snapshots caused by our own
+// pending writes so the local optimistic state isn't overwritten.
+export function subscribeToFirestore(onRemoteChange) {
+  const id = getFamilyId();
+  return onSnapshot(doc(db, "families", id), (snap) => {
+    if (snap.metadata.hasPendingWrites) return;
+    if (!snap.exists()) return;
+    onRemoteChange(snap.data());
+  });
 }

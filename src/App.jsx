@@ -1,5 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { loadFromFirestore, saveToFirestore, getFamilyId } from "./firebase.js";
+import { saveToFirestore, subscribeToFirestore, getFamilyId } from "./firebase.js";
+
+function useMidnightTick() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    let timeoutId;
+    const scheduleNext = () => {
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(24, 0, 5, 0);
+      timeoutId = setTimeout(() => {
+        setTick(t => t + 1);
+        scheduleNext();
+      }, next.getTime() - now.getTime());
+    };
+    scheduleNext();
+    return () => clearTimeout(timeoutId);
+  }, []);
+}
 
 function useIsTablet() {
   const [isTablet, setIsTablet] = useState(() => window.innerWidth >= 768);
@@ -1871,17 +1889,26 @@ export default function App() {
     }
   };
 
-  // On mount: load from Firestore and override local data if found
+  // On mount: subscribe to live Firestore updates. First snapshot replaces
+  // local data, subsequent snapshots apply changes from other devices.
   useEffect(() => {
-    loadFromFirestore().then(remote => {
-      if (remote) {
-        const patched = ensureFields(remote);
-        setData(patched);
-        saveDataLocal(patched);
+    let gotFirst = false;
+    const unsubscribe = subscribeToFirestore((remote) => {
+      const patched = ensureFields(remote);
+      setData(patched);
+      saveDataLocal(patched);
+      if (!gotFirst) {
+        gotFirst = true;
+        setLoading(false);
       }
-    }).catch(() => {}).finally(() => setLoading(false));
+    });
+    const timeout = setTimeout(() => {
+      if (!gotFirst) setLoading(false);
+    }, 3000);
+    return () => { unsubscribe(); clearTimeout(timeout); };
   }, []);
   const isTablet = useIsTablet();
+  useMidnightTick();
 
   useEffect(() => { requestPushPermission(); }, []);
 
