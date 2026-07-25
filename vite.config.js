@@ -2,9 +2,37 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Fehlt der VAPID-Key, faltet der Minifier `if (!VAPID_KEY) return …` zur
+// Konstante und wirft den Rest von registerPush() als toten Code weg. Das
+// Bundle baut dann fehlerfrei durch, hat aber stillschweigend kein Push mehr.
+// Deshalb: Build hart abbrechen, statt so etwas auszuliefern.
+function requireVapidKey() {
+  return {
+    name: 'require-vapid-key',
+    apply: 'build',
+    configResolved(config) {
+      const key = config.env.VITE_FIREBASE_VAPID_KEY
+      if (!key) {
+        throw new Error(
+          'VITE_FIREBASE_VAPID_KEY fehlt — Push wäre in diesem Build still deaktiviert.\n' +
+          'Der Key gehört in .env im Projektroot (Firebase Console → Project Settings →\n' +
+          'Cloud Messaging → Web Push certificates). Er ist öffentlich, kein Geheimnis.'
+        )
+      }
+      if (key.length !== 87) {
+        throw new Error(
+          `VITE_FIREBASE_VAPID_KEY hat ${key.length} statt 87 Zeichen — sieht abgeschnitten\n` +
+          'oder falsch kopiert aus. Erwartet wird ein base64url-kodierter P-256-Punkt.'
+        )
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    requireVapidKey(),
     react(),
     VitePWA({
       registerType: 'prompt',

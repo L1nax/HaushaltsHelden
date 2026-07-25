@@ -190,18 +190,20 @@ governed by the Firestore rules.
 
 ## Push notifications
 
-Push is optional. Without it the app works fully; you simply get no system notifications
-(the in-app bell keeps working).
-
 1. In the Firebase console, go to **Project Settings → Cloud Messaging → Web Push
    certificates**, generate a key pair and copy the public key.
-2. Create a `.env.local` in the project root:
+2. Put it in `.env` in the project root — the file is committed on purpose:
 
    ```
    VITE_FIREBASE_VAPID_KEY=your-public-vapid-key
    ```
 
-   The file is excluded from git via `.gitignore` (`*.local`).
+   The VAPID *public* key is not a secret. It ships inside every client bundle and is
+   readable by anyone in the browser, so hiding it in an ignored `.env.local` buys no
+   security while making it easy to build without it. `vite build` refuses to run when the
+   variable is missing or not 87 characters long: without it the minifier folds the
+   `if (!VAPID_KEY)` guard in `src/push.js` into a constant and strips the rest of
+   `registerPush()`, producing a build that has no push support and says nothing about it.
 3. Deploy the Cloud Function (requires the Blaze plan):
 
    ```bash
