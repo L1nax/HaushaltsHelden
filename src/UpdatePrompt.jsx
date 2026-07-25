@@ -1,10 +1,33 @@
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000 // 1h
+
 export default function UpdatePrompt() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
+    onRegisteredSW(swUrl, registration) {
+      if (!registration) return
+
+      const check = () => {
+        if (registration.installing || !navigator) return
+        if ('connection' in navigator && !navigator.onLine) return
+        registration.update().catch(() => {})
+      }
+
+      // Periodic background check for installed PWAs that stay open
+      setInterval(check, UPDATE_CHECK_INTERVAL_MS)
+
+      // Check when the app comes back to the foreground
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') check()
+      })
+      window.addEventListener('focus', check)
+
+      // Initial nudge in case the SW was already registered when we mounted
+      check()
+    },
     onRegisterError(error) {
       console.error('SW registration error', error)
     },

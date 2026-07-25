@@ -2051,7 +2051,7 @@ export default function App() {
 
   if (loading) return (
     <div style={{ fontFamily: "'Nunito', sans-serif", minHeight: "100vh", background: COLORS.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-      <div style={{ fontSize: 52, animation: "softPulse 1.6s ease-in-out infinite" }}>🏡</div>
+      <img src="/icon.png" alt="" style={{ width: 72, height: 72, animation: "softPulse 1.6s ease-in-out infinite" }} />
       <div style={{ fontWeight: 800, fontSize: 20, color: COLORS.dark }}>Haushalts-Helden</div>
       <div style={{ color: "#888", fontSize: 14 }}>Daten werden geladen…</div>
     </div>
@@ -2213,7 +2213,7 @@ export default function App() {
         <div style={{ width: 220, background: COLORS.dark, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
           <div style={{ padding: "22px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 24 }}>🏡</span>
+              <img src="/icon.png" alt="" style={{ width: 32, height: 32 }} />
               <span style={{ color: "white", fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>Haushalts-<br />Helden</span>
             </div>
           </div>
@@ -2274,7 +2274,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: "'Nunito', sans-serif", maxWidth: 720, margin: "0 auto", minHeight: "100vh", background: COLORS.cream }}>
       <div style={{ background: COLORS.dark, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ fontSize: 24 }}>🏡</span>
+        <img src="/icon.png" alt="" style={{ width: 32, height: 32 }} />
         <span style={{ color: "white", fontWeight: 800, fontSize: 18 }}>Haushalts-Helden</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {data.pin && <span style={{ color: COLORS.mint, fontSize: 12 }}>🔒</span>}

@@ -6,5 +6,5 @@ import {
 export default defineConfig({
   headLinkOptions: { preset: '2023' },
   preset,
-  images: ['public/pwa-icon.svg'],
+  images: ['public/icon.png'],
 })
