@@ -15,8 +15,13 @@ function getDeviceId() {
 }
 
 async function getSwRegistration() {
-  // Wir registrieren den FCM-SW explizit, damit er neben dem Vite-PWA-SW koexistiert.
-  return navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  // Eigener Scope, damit der FCM-SW nicht den Vite-PWA-SW (Scope "/") überschreibt.
+  // Ohne das clobbern sich beide Registrierungen gegenseitig: das Update-Popup bleibt
+  // dauerhaft stehen und der "Neu laden"-Button verpufft, weil SKIP_WAITING an eine
+  // Registrierung geht, die gerade nicht mehr aktiv ist.
+  return navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+    scope: "/firebase-cloud-messaging-push-scope",
+  });
 }
 
 function tokenDocRef(token) {
