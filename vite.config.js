@@ -35,7 +35,13 @@ export default defineConfig({
     requireVapidKey(),
     react(),
     VitePWA({
-      registerType: 'prompt',
+      // 'prompt' hat das "Neue Version"-Banner mehrmals täglich gezeigt: Wer
+      // "Später" drückte, blendete nur das Banner aus — der neue Service Worker
+      // blieb im Zustand "waiting" stehen, und Workbox meldet einen bereits
+      // wartenden SW bei jedem App-Start erneut. Immer dieselbe Version, immer
+      // wieder das Popup. 'autoUpdate' lässt den neuen SW sofort übernehmen
+      // (skipWaiting + clientsClaim setzt das Plugin dafür automatisch).
+      registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.v2.png'],
       manifest: {
         name: 'Haushalts-Helden',
